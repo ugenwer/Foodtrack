@@ -713,25 +713,18 @@ function doSearch(q){
   } else {
     document.getElementById('rlist').innerHTML='<div style="text-align:center;padding:32px;color:var(--t2)"><div class="spin"></div>Suche…</div>';
   }
-  // Online nur via HTTPS
-  if(location.protocol!=='https:'&&location.hostname!=='localhost'){
-    if(!local.length){
-      setSt('r','Keine Ergebnisse · Online-Suche nur via GitHub Pages');
-      document.getElementById('rlist').innerHTML=
-        '<div class="empty"><div class="ei">😕</div>'+
-        '<p style="font-size:13px">„'+q+'" nicht in lokaler DB gefunden.<br><br>'+
-        '<span style="color:var(--t3)">Online-Suche ist nur über<br>GitHub Pages (HTTPS) verfügbar.</span></p></div>';
-    }
-    return;
-  }
-  var url='https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+
-    '&search_simple=1&action=process&json=1&page_size=30&fields=product_name,brands,nutriments,categories_tags&sort_by=unique_scans_n';
+  // Online-Suche via CORS-Proxy
+  var url='https://api.allorigins.win/get?url='+encodeURIComponent(
+    'https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+
+    '&search_simple=1&action=process&json=1&page_size=30&fields=product_name,brands,nutriments,categories_tags&sort_by=unique_scans_n'
+  );
   var done=false,ctrl=new AbortController();
   var tid=setTimeout(function(){ctrl.abort();},12000);
   fetch(url,{signal:ctrl.signal})
     .then(function(r){clearTimeout(tid);return r.json();})
-    .then(function(data){
+    .then(function(resp){
       if(done)return;done=true;
+      var data=JSON.parse(resp.contents);
       var prods=(data.products||[]).filter(function(p){
         if(!p.product_name)return false;
         var n=p.nutriments||{};
@@ -862,9 +855,12 @@ function manualCode(){var c=prompt('Barcode-Nummer eingeben:');if(c&&c.trim().le
 function lookupCode(code){
   toast('🔍 Barcode '+code+'…');
   var ctrl=new AbortController();setTimeout(function(){ctrl.abort();},8000);
-  fetch('https://world.openfoodfacts.org/api/v0/product/'+code+'.json',{signal:ctrl.signal})
+  var apiUrl='https://world.openfoodfacts.org/api/v0/product/'+code+'.json';
+  var proxyUrl='https://api.allorigins.win/get?url='+encodeURIComponent(apiUrl);
+  fetch(proxyUrl,{signal:ctrl.signal})
     .then(function(r){return r.json();})
-    .then(function(d){
+    .then(function(resp){
+      var d=JSON.parse(resp.contents);
       if(d.status===1&&d.product){var f=p2f(d.product);go('search');window._foods=[f];setTimeout(function(){openM(0);},300);}
       else toast('❌ Produkt nicht gefunden');
     }).catch(function(){toast('❌ Netzwerkfehler');});
