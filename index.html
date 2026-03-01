@@ -257,7 +257,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <h1 style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;margin-bottom:12px">Lebensmittel</h1>
     <div class="search-bar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-      <input class="si" id="si" type="search" placeholder="z.B. Apfel, Hühnerbrust, Haferflocken…" autocomplete="off" autocorrect="off" spellcheck="false">
+      <input class="si" id="si" type="search" placeholder="Produkt, Hersteller oder Freitext…" autocomplete="off" autocorrect="off" spellcheck="false">
     </div>
   </div>
   <div class="sfilters">
@@ -466,25 +466,41 @@ const DB=[
   {name:'Kartoffel gekocht',e:'🥔',kcal:86,p:1.7,c:20,f:0.1,fi:1.8,s:0.9,sa:0},
   {name:'Süßkartoffel',e:'🍠',kcal:86,p:1.6,c:20,f:0.1,fi:3,s:4.2,sa:0},
   {name:'Quinoa gekocht',e:'🌾',kcal:120,p:4.4,c:22,f:1.9,fi:2.8,s:0.9,sa:0},
-  {name:'Cornflakes',e:'🥣',kcal:357,p:8,c:84,f:0.8,fi:3.8,s:10,sa:1.1},
-  {name:'Mandeln',e:'🌰',kcal:579,p:21,c:22,f:50,fi:13,s:4.4,sa:0},
-  {name:'Walnüsse',e:'🌰',kcal:654,p:15,c:14,f:65,fi:6.7,s:2.6,sa:0},
-  {name:'Cashews',e:'🌰',kcal:553,p:18,c:30,f:44,fi:3.3,s:5.9,sa:0.1},
-  {name:'Erdnüsse',e:'🥜',kcal:567,p:26,c:16,f:49,fi:8.5,s:4,sa:0.2},
-  {name:'Erdnussbutter',e:'🥜',kcal:588,p:25,c:20,f:50,fi:6,s:9,sa:0.4},
-  {name:'Chiasamen',e:'🌱',kcal:486,p:17,c:42,f:31,fi:34,s:0,sa:0.1},
-  {name:'Olivenöl',e:'🫒',kcal:884,p:0,c:0,f:100,fi:0,s:0,sa:0},
-  {name:'Linsen gekocht',e:'🫘',kcal:116,p:9,c:20,f:0.4,fi:7.9,s:1.8,sa:0},
-  {name:'Kichererbsen',e:'🫘',kcal:164,p:8.9,c:27,f:2.6,fi:7.6,s:4.8,sa:0},
-  {name:'Kidneybohnen',e:'🫘',kcal:127,p:8.7,c:22,f:0.5,fi:7.4,s:0.3,sa:0},
-  {name:'Schokolade Zartbitter',e:'🍫',kcal:546,p:5,c:60,f:31,fi:9,s:48,sa:0},
-  {name:'Schokolade Vollmilch',e:'🍫',kcal:535,p:7.7,c:60,f:29,fi:3.4,s:55,sa:0.1},
-  {name:'Kartoffelchips',e:'🍟',kcal:536,p:7,c:53,f:34,fi:4.4,s:0.5,sa:1.4},
-  {name:'Proteinpulver Whey',e:'💪',kcal:370,p:80,c:6,f:4,fi:0,s:4,sa:0.5},
-  {name:'Orangensaft',e:'🍊',kcal:45,p:0.7,c:10,f:0.2,fi:0.2,s:8.4,sa:0},
-  {name:'Cola',e:'🥤',kcal:42,p:0,c:11,f:0,fi:0,s:11,sa:0},
-  {name:'Mineralwasser',e:'💧',kcal:0,p:0,c:0,f:0,fi:0,s:0,sa:0},
-  {name:'Kaffee schwarz',e:'☕',kcal:2,p:0.3,c:0,f:0,fi:0,s:0,sa:0},
+  {name:'Cornflakes',e:'🥣',kcal:357,p:8,c:84,f:0.8,fi:3.8,s:10,sa:1.1,b:'Kellogg\'s'},
+  {name:'Frosties',e:'🥣',kcal:378,p:5,c:89,f:0.6,fi:1,s:37,sa:0.9,b:'Kellogg\'s'},
+  {name:'Müsli Klassisch',e:'🥣',kcal:364,p:10,c:65,f:6,fi:8,s:18,sa:0.1,b:''},
+  {name:'Crunchy Müsli',e:'🥣',kcal:430,p:8,c:64,f:15,fi:6,s:22,sa:0.2,b:''},
+  {name:'Mandeln',e:'🌰',kcal:579,p:21,c:22,f:50,fi:13,s:4.4,sa:0,b:''},
+  {name:'Walnüsse',e:'🌰',kcal:654,p:15,c:14,f:65,fi:6.7,s:2.6,sa:0,b:''},
+  {name:'Cashews',e:'🌰',kcal:553,p:18,c:30,f:44,fi:3.3,s:5.9,sa:0.1,b:''},
+  {name:'Erdnüsse',e:'🥜',kcal:567,p:26,c:16,f:49,fi:8.5,s:4,sa:0.2,b:''},
+  {name:'Erdnussbutter',e:'🥜',kcal:588,p:25,c:20,f:50,fi:6,s:9,sa:0.4,b:''},
+  {name:'Nutella',e:'🍫',kcal:530,p:6.3,c:57.5,f:30.9,fi:0,s:56.3,sa:0.1,b:'Ferrero'},
+  {name:'Chiasamen',e:'🌱',kcal:486,p:17,c:42,f:31,fi:34,s:0,sa:0.1,b:''},
+  {name:'Olivenöl',e:'🫒',kcal:884,p:0,c:0,f:100,fi:0,s:0,sa:0,b:''},
+  {name:'Linsen gekocht',e:'🫘',kcal:116,p:9,c:20,f:0.4,fi:7.9,s:1.8,sa:0,b:''},
+  {name:'Kichererbsen',e:'🫘',kcal:164,p:8.9,c:27,f:2.6,fi:7.6,s:4.8,sa:0,b:''},
+  {name:'Kidneybohnen',e:'🫘',kcal:127,p:8.7,c:22,f:0.5,fi:7.4,s:0.3,sa:0,b:''},
+  {name:'Schokolade Zartbitter',e:'🍫',kcal:546,p:5,c:60,f:31,fi:9,s:48,sa:0,b:''},
+  {name:'Schokolade Vollmilch',e:'🍫',kcal:535,p:7.7,c:60,f:29,fi:3.4,s:55,sa:0.1,b:'Milka'},
+  {name:'Ritter Sport Vollmilch',e:'🍫',kcal:535,p:7,c:56,f:30,fi:1,s:52,sa:0.1,b:'Ritter Sport'},
+  {name:'Kartoffelchips',e:'🍟',kcal:536,p:7,c:53,f:34,fi:4.4,s:0.5,sa:1.4,b:''},
+  {name:'Pringles Original',e:'🍟',kcal:524,p:4.4,c:52,f:33,fi:3.4,s:0.6,sa:1.2,b:'Pringles'},
+  {name:'Proteinpulver Whey',e:'💪',kcal:370,p:80,c:6,f:4,fi:0,s:4,sa:0.5,b:''},
+  {name:'Orangensaft',e:'🍊',kcal:45,p:0.7,c:10,f:0.2,fi:0.2,s:8.4,sa:0,b:''},
+  {name:'Apfelsaft',e:'🍎',kcal:46,p:0.1,c:11.3,f:0.1,fi:0.2,s:10.9,sa:0,b:''},
+  {name:'Cola',e:'🥤',kcal:42,p:0,c:11,f:0,fi:0,s:11,sa:0,b:'Coca-Cola'},
+  {name:'Cola Zero',e:'🥤',kcal:1,p:0,c:0,f:0,fi:0,s:0,sa:0,b:'Coca-Cola'},
+  {name:'Fanta',e:'🥤',kcal:48,p:0,c:12,f:0,fi:0,s:12,sa:0,b:'Fanta'},
+  {name:'Mineralwasser',e:'💧',kcal:0,p:0,c:0,f:0,fi:0,s:0,sa:0,b:''},
+  {name:'Kaffee schwarz',e:'☕',kcal:2,p:0.3,c:0,f:0,fi:0,s:0,sa:0,b:''},
+  {name:'Milchkaffee Latte',e:'☕',kcal:54,p:3,c:5,f:2.3,fi:0,s:5,sa:0.1,b:''},
+  {name:'Red Bull',e:'🥤',kcal:45,p:0,c:11,f:0,fi:0,s:11,sa:0.1,b:'Red Bull'},
+  {name:'Protein Bar',e:'💪',kcal:350,p:30,c:35,f:9,fi:3,s:5,sa:0.3,b:''},
+  {name:'Müsliriegel',e:'🍫',kcal:382,p:5,c:64,f:12,fi:3,s:32,sa:0.3,b:''},
+  {name:'Haribo Goldbären',e:'🐻',kcal:343,p:6.9,c:77,f:0.5,fi:0,s:46,sa:0.1,b:'Haribo'},
+  {name:'Zwieback',e:'🍞',kcal:385,p:11,c:76,f:4,fi:2.5,s:7,sa:0.4,b:''},
+  {name:'Knäckebrot',e:'🍞',kcal:341,p:10,c:64,f:3,fi:16,s:1,sa:0.9,b:'Wasa'},
 ];
 
 // ═══ STATE ═══
@@ -688,98 +704,102 @@ window._foods=[];
 
 function doSearch(q){
   var ql=q.toLowerCase();
-  var local=DB.filter(function(f){ return f.name.toLowerCase().indexOf(ql)>=0; });
 
-  // Show local immediately
+  // Lokale Suche: Name UND Hersteller (b-Feld)
+  var local=DB.filter(function(f){
+    return f.name.toLowerCase().indexOf(ql)>=0 ||
+           (f.b||'').toLowerCase().indexOf(ql)>=0;
+  });
+
   if(local.length){
     setStatus('orange','Lokale Treffer: '+local.length+' – Online-Suche läuft…');
     window._foods=local;
     renderList(local);
   } else {
-    document.getElementById('rlist').innerHTML='<div class="loading"><div class="spinner"></div>Suche…</div>';
+    document.getElementById('rlist').innerHTML='<div class="loading"><div class="spinner"></div>Suche läuft…</div>';
   }
 
-  // Online search (only on HTTPS)
+  // Online nur über HTTPS
   var isSecure=(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1');
   if(!isSecure){
-    if(local.length) setStatus('orange','Offline-Modus: '+local.length+' lokale Treffer');
+    if(local.length) setStatus('orange','Lokal: '+local.length+' Treffer · Online nur via GitHub Pages');
     else {
-      setStatus('red','Keine Verbindung (kein HTTPS)');
+      setStatus('red','Nur lokal verfügbar (kein HTTPS)');
       document.getElementById('rlist').innerHTML='<div class="empty"><div class="empty-icon">📵</div>'+
-        '<p style="font-size:13px">Keine lokalen Ergebnisse.<br><br>'+
-        'Online-Suche funktioniert nur<br>über <b style="color:var(--accent)">GitHub Pages</b> (https).</p></div>';
+        '<p style="font-size:13px">Online-Suche funktioniert nur über<br><b style="color:var(--accent)">GitHub Pages (HTTPS)</b>.<br><br>'+
+        'Lokal kannst du aus der eingebauten<br>Datenbank (65 Lebensmittel) wählen.</p></div>';
     }
     return;
   }
 
-  // Try multiple API endpoints in sequence
   tryOnlineSearch(q, local);
 }
 
 function tryOnlineSearch(q, local) {
-  // API endpoints to try in order
-  var endpoints = [
-    // OpenFoodFacts v2 (neuere API, bessere CORS-Header)
-    'https://world.openfoodfacts.org/api/v2/search?search_terms=' + encodeURIComponent(q) + '&page_size=24&fields=product_name,brands,nutriments,categories_tags',
-    // OpenFoodFacts v1 classic
-    'https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + encodeURIComponent(q) + '&search_simple=1&action=process&json=1&page_size=24&fields=product_name,brands,nutriments,categories_tags',
-  ];
-  var idx = 0;
+  // Nutze den offiziellen OFF-API-Endpunkt der CORS korrekt setzt
+  // UND suche auch nach Hersteller (brands) via separatem Parameter
+  var url = 'https://world.openfoodfacts.org/cgi/search.pl?' + [
+    'search_terms=' + encodeURIComponent(q),
+    'search_simple=1',
+    'action=process',
+    'json=1',
+    'page_size=30',
+    'fields=product_name,brands,nutriments,categories_tags',
+    'sort_by=unique_scans_n'  // Beliebteste zuerst
+  ].join('&');
 
-  function tryNext() {
-    if (idx >= endpoints.length) {
-      // All failed
-      if (local.length) setStatus('orange', local.length + ' lokale Treffer (kein Internet)');
-      else {
-        setStatus('red', 'Kein Internet / API nicht erreichbar');
-        document.getElementById('rlist').innerHTML =
-          '<div class="empty"><div class="empty-icon">📵</div>' +
-          '<p style="font-size:13px">Keine Verbindung zu OpenFoodFacts.<br><br>' +
-          '✅ Stelle sicher, dass die App über<br><b style="color:var(--accent)">GitHub Pages (HTTPS)</b><br>geöffnet ist.<br><br>' +
-          '🔄 Manchmal hilft auch ein<br>Neuladen der Seite.</p></div>';
-      }
-      return;
-    }
-    var url = endpoints[idx++];
-    var ctrl = new AbortController();
-    var tid = setTimeout(function() { ctrl.abort(); }, 8000);
+  var ctrl = new AbortController();
+  var tid = setTimeout(function(){ ctrl.abort(); }, 10000);
 
-    fetch(url, { signal: ctrl.signal, mode: 'cors' })
-      .then(function(r) {
-        clearTimeout(tid);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
-      .then(function(data) {
-        // v2 uses 'products', v1 also uses 'products'
-        var prods = (data.products || []).filter(function(p) {
-          return p.product_name && p.nutriments &&
-            (p.nutriments['energy-kcal_100g'] || p.nutriments['energy-kcal'] || p.nutriments['energy_100g']);
-        });
-        if (prods.length) {
-          var online = prods.map(offToFood);
-          var lnames = local.map(function(l) { return l.name.toLowerCase(); });
-          var merged = local.concat(online.filter(function(o) {
-            return lnames.indexOf(o.name.toLowerCase()) < 0;
-          }));
-          setStatus('dot', merged.length + ' Ergebnisse (Online + Lokal)');
-          window._foods = merged;
-          renderList(merged);
-        } else if (local.length) {
-          setStatus('orange', local.length + ' lokale Treffer');
-        } else {
-          setStatus('red', 'Keine Ergebnisse für "' + q + '"');
-          document.getElementById('rlist').innerHTML =
-            '<div class="empty"><div class="empty-icon">😕</div><p style="font-size:13px">Keine Ergebnisse gefunden</p></div>';
-        }
-      })
-      .catch(function(err) {
-        clearTimeout(tid);
-        // Try next endpoint
-        tryNext();
+  fetch(url, { signal: ctrl.signal })
+    .then(function(r){
+      clearTimeout(tid);
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.json();
+    })
+    .then(function(data){
+      var ql = q.toLowerCase();
+      var prods = (data.products||[]).filter(function(p){
+        if(!p.product_name) return false;
+        var n = p.nutriments||{};
+        var hasKcal = n['energy-kcal_100g']||n['energy-kcal']||n['energy_100g']||n['energy-kj_100g'];
+        return !!hasKcal;
       });
-  }
-  tryNext();
+
+      if(!prods.length){
+        if(local.length) setStatus('orange',local.length+' lokale Treffer (Online: 0 Ergebnisse)');
+        else {
+          setStatus('red','Keine Ergebnisse');
+          document.getElementById('rlist').innerHTML='<div class="empty"><div class="empty-icon">😕</div>'+
+            '<p style="font-size:13px">Keine Ergebnisse für „'+q+'"</p></div>';
+        }
+        return;
+      }
+
+      var online = prods.map(offToFood);
+      var lnames = local.map(function(l){ return l.name.toLowerCase(); });
+      var merged = local.concat(online.filter(function(o){
+        return lnames.indexOf(o.name.toLowerCase()) < 0;
+      }));
+
+      setStatus('dot', merged.length+' Ergebnisse ✓');
+      window._foods = merged;
+      renderList(merged);
+    })
+    .catch(function(err){
+      clearTimeout(tid);
+      var msg = err && err.name === 'AbortError' ? 'Timeout (10s)' : (err ? err.message : 'Unbekannt');
+      if(local.length){
+        setStatus('orange', local.length+' lokale Treffer · Online-Fehler: '+msg);
+      } else {
+        setStatus('red', 'Netzwerkfehler: '+msg);
+        document.getElementById('rlist').innerHTML='<div class="empty"><div class="empty-icon">📵</div>'+
+          '<p style="font-size:13px">Verbindungsfehler:<br><b>'+msg+'</b><br><br>'+
+          'Protokoll: '+location.protocol+'<br>'+
+          'Host: '+location.hostname+'<br><br>'+
+          'Prüfe deine Internetverbindung<br>und ob die App über HTTPS läuft.</p></div>';
+      }
+    });
 }
 
 function offToFood(p){
