@@ -368,6 +368,13 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
 </div>
 
 <script>
+// ════════════════════════════════════════════════════════════════
+//  FEHLERBEHANDLUNG
+// ════════════════════════════════════════════════════════════════
+window._appReady = false;
+window.addEventListener('error', function(e) { console.error('ERROR:', e.error); });
+window.addEventListener('unhandledrejection', function(e) { console.error('REJECTION:', e.reason); });
+
 // ══════════════════════════════════════════════════════
 //  DATENBANK  –  500+ Einträge, Suche nach Name + Marke
 // ══════════════════════════════════════════════════════
@@ -577,6 +584,7 @@ function save(){try{localStorage.setItem('nt5',JSON.stringify(S));}catch(e){}}
 
 // ══ BOOT ══
 window.addEventListener('DOMContentLoaded',function(){
+  try{
   // date
   document.getElementById('today-lbl').textContent=
     new Date().toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long'});
@@ -613,6 +621,9 @@ window.addEventListener('DOMContentLoaded',function(){
   });
   updH();
   updStats();
+  window._appReady = true;
+  console.log('✅ NutriTrack initialized');
+  }catch(e){console.error('Init Error:',e);toast('⚠️ Error: '+e.message);}
 });
 
 // ══ NAV ══
