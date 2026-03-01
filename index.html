@@ -317,7 +317,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
   <div class="scFrame"><div class="sc tl"></div><div class="sc tr"></div><div class="sc bl"></div><div class="sc br"></div><div class="scLine"></div></div>
   <div class="scBot">
     <div class="scHint">EAN-Barcode in den Rahmen halten</div>
-    <button class="scMan" onclick="manualCode()">✏️ Nummer manuell eingeben</button>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button class="scMan" id="torch-btn" onclick="toggleTorch()" style="display:none;font-size:19px;padding:8px 14px">🔦</button>
+      <button class="scMan" onclick="manualCode()">✏️ Manuell eingeben</button>
+    </div>
   </div>
 </div>
 
@@ -368,7 +371,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
 // ══════════════════════════════════════════════════════
 //  DATENBANK  –  500+ Einträge, Suche nach Name + Marke
 // ══════════════════════════════════════════════════════
-// Lokale DB entfernt - vollständig Online-Suche optimiert,
+const DB=[
 {n:'Banane',e:'🍌',k:89,p:1.1,c:23,f:0.3,fi:2.6,s:12,sa:0,b:''},
 {n:'Orange',e:'🍊',k:47,p:0.9,c:12,f:0.1,fi:2.4,s:9,sa:0,b:''},
 {n:'Mandarine',e:'🍊',k:53,p:0.9,c:13,f:0.3,fi:1.8,s:11,sa:0,b:''},
@@ -385,7 +388,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
 {n:'Kiwi',e:'🥝',k:61,p:1.1,c:15,f:0.5,fi:3,s:9,sa:0,b:''},
 {n:'Avocado',e:'🥑',k:160,p:2,c:9,f:15,fi:7,s:0.7,sa:0,b:''},
 {n:'Papaya',e:'🍈',k:43,p:0.5,c:11,f:0.4,fi:1.7,s:7.8,sa:0,b:''},
-// GEMÜSE
 {n:'Tomate',e:'🍅',k:18,p:0.9,c:3.9,f:0.2,fi:1.2,s:2.6,sa:0,b:''},
 {n:'Gurke',e:'🥒',k:15,p:0.7,c:3.6,f:0.1,fi:0.5,s:1.7,sa:0,b:''},
 {n:'Paprika rot',e:'🫑',k:31,p:1,c:6,f:0.3,fi:2.1,s:4.2,sa:0,b:''},
@@ -405,7 +407,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
 {n:'Champignons',e:'🍄',k:22,p:3.1,c:3.3,f:0.3,fi:1,s:1.7,sa:0,b:''},
 {n:'Porree Lauch',e:'🥬',k:61,p:1.5,c:14,f:0.3,fi:1.8,s:3.9,sa:0,b:''},
 {n:'Sellerie',e:'🥬',k:16,p:0.7,c:3,f:0.2,fi:1.6,s:1.4,sa:0.1,b:''},
-// FLEISCH & FISCH
 {n:'Hühnerbrust',e:'🍗',k:165,p:31,c:0,f:3.6,fi:0,s:0,sa:0.1,b:''},
 {n:'Hähnchenschenkel',e:'🍗',k:209,p:26,c:0,f:11,fi:0,s:0,sa:0.1,b:''},
 {n:'Hähnchenflügel',e:'🍗',k:203,p:17,c:0,f:15,fi:0,s:0,sa:0.2,b:''},
@@ -428,7 +429,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
 {n:'Garnelen',e:'🦐',k:85,p:18,c:0.9,f:0.9,fi:0,s:0,sa:0.5,b:''},
 {n:'Hering',e:'🐟',k:158,p:18,c:0,f:9,fi:0,s:0,sa:0.1,b:''},
 {n:'Makrele',e:'🐟',k:205,p:19,c:0,f:14,fi:0,s:0,sa:0.1,b:''},
-// EIER & MILCH
 {n:'Ei roh',e:'🥚',k:143,p:13,c:0.7,f:9.5,fi:0,s:0.4,sa:0.4,b:''},
 {n:'Ei gekocht',e:'🥚',k:155,p:13,c:1.1,f:11,fi:0,s:1.1,sa:0.4,b:''},
 {n:'Ei Spiegelei',e:'🍳',k:196,p:14,c:0.4,f:15,fi:0,s:0.4,sa:0.4,b:''},
@@ -459,7 +459,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
 {n:'Sojadrink',e:'🥛',k:42,p:3.4,c:2.6,f:1.9,fi:0.4,s:2.3,sa:0.1,b:''},
 {n:'Hafermilch',e:'🥛',k:45,p:1,c:6.7,f:1.5,fi:0.8,s:4,sa:0.1,b:''},
 {n:'Mandelmilch',e:'🥛',k:24,p:0.6,c:3.5,f:1.2,fi:0.4,s:3.1,sa:0.1,b:''},
-// GETREIDE & KOHLENHYDRATE
 {n:'Haferflocken Kernige',e:'🌾',k:372,p:13,c:61,f:7,fi:9.6,s:0.8,sa:0,b:''},
 {n:'Haferflocken Zarte',e:'🌾',k:369,p:13,c:60,f:7.1,fi:9,s:0.8,sa:0,b:''},
 {n:'Granola',e:'🥣',k:421,p:8.3,c:62,f:15,fi:6.7,s:22,sa:0.2,b:''},
@@ -486,7 +485,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
 {n:'Quinoa gekocht',e:'🌾',k:120,p:4.4,c:22,f:1.9,fi:2.8,s:0.9,sa:0,b:''},
 {n:'Couscous gekocht',e:'🌾',k:112,p:3.8,c:23,f:0.2,fi:1.4,s:0,sa:0,b:''},
 {n:'Bulgur gekocht',e:'🌾',k:83,p:3.1,c:18,f:0.2,fi:4.5,s:0,sa:0,b:''},
-// HÜLSENFRÜCHTE
 {n:'Linsen rote gekocht',e:'🫘',k:116,p:9,c:20,f:0.4,fi:7.9,s:1.8,sa:0,b:''},
 {n:'Linsen grüne gekocht',e:'🫘',k:116,p:9,c:20,f:0.4,fi:7.9,s:1.8,sa:0,b:''},
 {n:'Kichererbsen gekocht',e:'🫘',k:164,p:8.9,c:27,f:2.6,fi:7.6,s:4.8,sa:0,b:''},
@@ -494,7 +492,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
 {n:'Schwarze Bohnen',e:'🫘',k:132,p:8.9,c:24,f:0.5,fi:8.7,s:0.3,sa:0,b:''},
 {n:'Edamame',e:'🫛',k:121,p:11,c:8.9,f:5.2,fi:5.2,s:2.2,sa:0,b:''},
 {n:'Sojaprotein TVP',e:'🫘',k:327,p:52,c:30,f:1,fi:16,s:0,sa:0.1,b:''},
-// NÜSSE & SAMEN
 {n:'Mandeln',e:'🌰',k:579,p:21,c:22,f:50,fi:13,s:4.4,sa:0,b:''},
 {n:'Walnüsse',e:'🌰',k:654,p:15,c:14,f:65,fi:6.7,s:2.6,sa:0,b:''},
 {n:'Cashews',e:'🌰',k:553,p:18,c:30,f:44,fi:3.3,s:5.9,sa:0.1,b:''},
@@ -511,12 +508,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
 {n:'Sonnenblumenkerne',e:'🌻',k:584,p:21,c:20,f:51,fi:8.6,s:2.6,sa:0.1,b:''},
 {n:'Kürbiskerne',e:'🌱',k:559,p:30,c:11,f:49,fi:6,s:1.4,sa:0,b:''},
 {n:'Sesam',e:'🌱',k:573,p:18,c:23,f:50,fi:8,s:0.3,sa:0,b:''},
-// ÖLE & FETTE
 {n:'Olivenöl',e:'🫒',k:884,p:0,c:0,f:100,fi:0,s:0,sa:0,b:''},
 {n:'Rapsöl',e:'🫒',k:884,p:0,c:0,f:100,fi:0,s:0,sa:0,b:''},
 {n:'Kokosöl',e:'🫒',k:862,p:0,c:0,f:100,fi:0,s:0,sa:0,b:''},
 {n:'Sonnenblumenöl',e:'🫒',k:884,p:0,c:0,f:100,fi:0,s:0,sa:0,b:''},
-// MARKENPROD. & FERTIGES
 {n:'Nutella',e:'🍫',k:530,p:6.3,c:57.5,f:30.9,fi:0,s:56.3,sa:0.1,b:'Ferrero'},
 {n:'Milka Schokolade',e:'🍫',k:535,p:7.5,c:57,f:29,fi:1,s:54,sa:0.1,b:'Milka'},
 {n:'Ritter Sport Vollmilch',e:'🍫',k:535,p:7,c:56,f:30,fi:1,s:52,sa:0.1,b:'Ritter Sport'},
@@ -529,7 +524,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
 {n:'Proteinriegel',e:'💪',k:350,p:30,c:35,f:9,fi:3,s:5,sa:0.3,b:''},
 {n:'Whey Proteinpulver',e:'💪',k:370,p:80,c:6,f:4,fi:0,s:4,sa:0.5,b:''},
 {n:'Plant Protein Erbsenprotein',e:'💪',k:360,p:80,c:5,f:5,fi:2,s:2,sa:0.5,b:''},
-// GETRÄNKE
 {n:'Wasser Mineralwasser',e:'💧',k:0,p:0,c:0,f:0,fi:0,s:0,sa:0,b:''},
 {n:'Kaffee schwarz',e:'☕',k:2,p:0.3,c:0,f:0,fi:0,s:0,sa:0,b:''},
 {n:'Cappuccino',e:'☕',k:54,p:3.2,c:4.9,f:2.5,fi:0,s:4.9,sa:0.1,b:''},
@@ -548,7 +542,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
 {n:'Rotwein',e:'🍷',k:85,p:0.1,c:2.6,f:0,fi:0,s:0.6,sa:0,b:''},
 {n:'Prosecco Sekt',e:'🥂',k:80,p:0.3,c:5,f:0,fi:0,s:4,sa:0,b:''},
 {n:'Proteinshake',e:'💪',k:180,p:25,c:12,f:3,fi:0,s:5,sa:0.2,b:''},
-// FERTIGGERICHTE & FAST FOOD
 {n:'Pizza Margherita',e:'🍕',k:233,p:10,c:32,f:8,fi:2.3,s:3.2,sa:0.8,b:''},
 {n:'Döner Kebab',e:'🌯',k:230,p:13,c:23,f:9,fi:1.8,s:2,sa:0.8,b:''},
 {n:'Burger Hamburger',e:'🍔',k:295,p:17,c:24,f:14,fi:1.3,s:5,sa:0.8,b:''},
@@ -560,21 +553,21 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
 {n:'Döner im Fladenbrot',e:'🌯',k:225,p:12,c:22,f:9,fi:2,s:2,sa:0.8,b:''},
 {n:'Lachs-Sushi 6 Stück',e:'🍣',k:158,p:8,c:27,f:2.5,fi:0.5,s:2,sa:0.7,b:''},
 {n:'Instant Nudeln',e:'🍜',k:454,p:9,c:62,f:18,fi:2,s:1,sa:2.4,b:''},
-// SAUCEN & WÜRZEN
 {n:'Ketchup',e:'🍅',k:112,p:1.7,c:27,f:0.2,fi:0.9,s:22,sa:1.8,b:''},
 {n:'Mayonnaise',e:'🫙',k:680,p:1.7,c:3,f:74,fi:0,s:2,sa:1.1,b:''},
 {n:'Senf',e:'🫙',k:93,p:5.7,c:6.4,f:4.6,fi:3.8,s:3.6,sa:2.1,b:''},
 {n:'Sojasoße',e:'🫙',k:71,p:9.8,c:6.6,f:0.1,fi:0.4,s:1.4,sa:14,b:''},
 {n:'Pesto',e:'🫙',k:433,p:6.1,c:4.4,f:43,fi:1.5,s:2.6,sa:0.8,b:''},
 {n:'Hummus',e:'🫘',k:166,p:7.9,c:14,f:9.6,fi:6,s:0.6,sa:0.7,b:''},
-// DESSERTS & KUCHEN
 {n:'Joghurt Frucht',e:'🍓',k:100,p:3.7,c:16,f:2.7,fi:0.3,s:15,sa:0.1,b:''},
 {n:'Eis Vanille',e:'🍦',k:207,p:3.5,c:24,f:11,fi:0,s:21,sa:0.1,b:''},
 {n:'Käsekuchen',e:'🍰',k:320,p:7,c:30,f:18,fi:0.5,s:20,sa:0.3,b:''},
 {n:'Apfelkuchen',e:'🍰',k:265,p:3.5,c:42,f:9,fi:1.5,s:20,sa:0.3,b:''},
 {n:'Tiramisu',e:'🍰',k:283,p:5.8,c:27,f:17,fi:0.4,s:14,sa:0.1,b:''},
 {n:'Muffin',e:'🧁',k:378,p:5.7,c:56,f:15,fi:1.4,s:29,sa:0.5,b:''},
-{n:'Croissant',e:'🥐',k:406,p:8.2,c:46,f:21,fi:2.6,s:9.6,sa:0.7,b:''},
+{n:'Croissant',e:'🥐',k:406,p:8.2,c:46,f:21,fi:2.6,s:9.6,sa:0.7,b:''}
+];
+
 // ══ STATE ══
 const TODAY=new Date().toISOString().split('T')[0];
 function mkS(){return{profile:{name:'',age:'',weight:'',height:'',gCal:2000,gP:120,gC:250,gF:70},log:{},steps:{},recent:[],favorites:[],savedMeals:[]};}
@@ -738,45 +731,39 @@ function doSearch(q){
   searchOnline(q,cacheKey);
 }
 function searchOnline(q,cacheKey){
-  var proxies=[\n    'https://api.codetabs.com/v1/proxy?quest=https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=20&fields=product_name,brands,nutriments,categories_tags&sort_by=unique_scans_n',
-    'https://corsproxy.io/?'+encodeURIComponent('https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=20&fields=product_name,brands,nutriments,categories_tags&sort_by=unique_scans_n'),
-    'https://api.allorigins.win/get?url='+encodeURIComponent('https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=20&fields=product_name,brands,nutriments,categories_tags&sort_by=unique_scans_n')
+  var done=false,errors=0;
+  var urls=[
+    'https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=24&fields=product_name,brands,nutriments,categories_tags&sort_by=unique_scans_n',
+    'https://world.openfoodfacts.org/api/v2/search?search_terms='+encodeURIComponent(q)+'&page_size=24&fields=product_name,brands,nutriments,categories_tags&sort_by=unique_scans_n'
   ];
-  var done=false,attempts=0;
-  function tryProxy(idx){
-    if(idx>=proxies.length||done){if(!done){done=true;setSt('⚠️','Alle Proxies fehlgeschlagen');document.getElementById('rlist').innerHTML='<div class="empty"><div class="ei">📵</div><p style="font-size:13px">OpenFoodFacts nicht erreichbar.<br>Versuchen Sie es in Kürze erneut.</p></div>';}}return;
-    attempts++;
-    var url=proxies[idx];
-    var ctrl=new AbortController();
-    var tid=setTimeout(function(){ctrl.abort();},3500);
-    fetch(url,{signal:ctrl.signal})
-      .then(function(r){clearTimeout(tid);return r.json();})
-      .then(function(data){
-        if(done)return;done=true;clearTimeout(tid);
-        var prods=(data.products||data.contents?JSON.parse(data.contents).products:[]).filter(function(p){
-          if(!p.product_name)return false;
-          var n=p.nutriments||{};
-          return n['energy-kcal_100g']||n['energy-kcal']||n['energy_100g']||n['energy-kj_100g'];
-        });
-        var online=prods.map(p2f);
-        _offCache[cacheKey]=online;
-        var favs=(S.favorites||[]).filter(function(f){return f.n.toLowerCase().indexOf(q.toLowerCase())>=0;});
-        var recents=(S.recent||[]).slice(0,3).filter(function(r){return r.n.toLowerCase().indexOf(q.toLowerCase())>=0;});
-        var merged=favs.concat(recents).concat(online.filter(function(o){
-          return !favs.some(function(f){return f.n===o.n;})&&!recents.some(function(r){return r.n===o.n;});
-        }));
-        if(!merged.length){setSt('r','Keine Ergebnisse');document.getElementById('rlist').innerHTML='<div class="empty"><div class="ei">😕</div><p style="font-size:13px">Keine Ergebnisse für „'+q+'"</p></div>';return;}
-        setSt('✓',merged.length+' Ergebnisse');
-        window._foods=merged;
-        renderList(merged);
-      })
-      .catch(function(){
-        clearTimeout(tid);if(done)return;
-        if(idx<proxies.length-1)tryProxy(idx+1);else{done=true;setSt('⚠️','Alle Proxies fehlgeschlagen');document.getElementById('rlist').innerHTML='<div class="empty"><div class="ei">📵</div><p style="font-size:13px">OpenFoodFacts nicht erreichbar.<br>Versuchen Sie es in Kürze erneut.</p></div>';}
-      });
+  function finish(data){
+    if(done)return;
+    done=true;
+    var prods=(data.products||[]).filter(function(p){
+      if(!p.product_name)return false;
+      var n=p.nutriments||{};
+      return n['energy-kcal_100g']||n['energy-kcal']||n['energy_100g']||n['energy-kj_100g'];
+    });
+    var online=prods.map(p2f);
+    _offCache[cacheKey]=online;
+    var ql=q.toLowerCase();
+    var favs=(S.favorites||[]).filter(function(f){return f.n.toLowerCase().indexOf(ql)>=0;});
+    var recents=(S.recent||[]).slice(0,3).filter(function(r){return r.n.toLowerCase().indexOf(ql)>=0;});
+    var merged=favs.concat(recents).concat(online.filter(function(o){
+      return !favs.some(function(f){return f.n===o.n;})&&!recents.some(function(r){return r.n===o.n;});
+    }));
+    if(!merged.length){setSt('r','Keine Ergebnisse');document.getElementById('rlist').innerHTML='<div class="empty"><div class="ei">\ud83d\ude15</div><p style="font-size:13px">Keine Ergebnisse f\u00fcr \u201e'+q+'\u201c</p></div>';return;}
+    setSt('g',merged.length+' Ergebnisse \u2713');
+    window._foods=merged;renderList(merged);
   }
-  tryProxy(0);
+  function onErr(){errors++;if(errors>=urls.length&&!done){done=true;setSt('r','Nicht erreichbar');document.getElementById('rlist').innerHTML='<div class="empty"><div class="ei">\ud83d\udcf5</div><p style="font-size:13px">Keine Verbindung.<br>Pr\u00fcfe dein Internet.</p></div>';}}
+  urls.forEach(function(url){
+    var ctrl=new AbortController();
+    setTimeout(function(){ctrl.abort();},8000);
+    fetch(url,{signal:ctrl.signal}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(finish).catch(onErr);
+  });
 }
+
 function p2f(p){
   var n=p.nutriments||{};
   var kc=n['energy-kcal_100g']||n['energy-kcal']||(n['energy-kj_100g']?Math.round(n['energy-kj_100g']/4.184):(n['energy_100g']?Math.round(n['energy_100g']/4.184):0));
@@ -888,60 +875,83 @@ function loadSavedMeal(){
   save();updH();go('home');toast('✅ Mahlzeit "'+meal.name+'" hinzugefügt');
 }
 
-// ══ SCANNER ══
-var scanStream=null,scanOn=false;
+// \u2550\u2550 SCANNER \u2550\u2550
+var scanStream=null,scanOn=false,torchOn=false;
 function openScan(){
   var sec=location.protocol==='https:'||location.hostname==='localhost';
-  if(!sec){toast('⚠️ Scanner nur über HTTPS (GitHub Pages)');setTimeout(manualCode,300);return;}
+  if(!sec){toast('\u26a0\ufe0f Scanner nur \u00fcber HTTPS');setTimeout(manualCode,300);return;}
+  torchOn=false;
   document.getElementById('scanner').classList.add('on');
-  navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}})
+  var tb=document.getElementById('torch-btn');
+  if(tb){tb.textContent='\ud83d\udd26';tb.style.background='rgba(255,255,255,.12)';tb.style.display='none';}
+  navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280}}})
     .then(function(st){
       scanStream=st;scanOn=true;
       var cam=document.getElementById('cam');cam.srcObject=st;cam.play();
+      var track=st.getVideoTracks()[0];
+      if(track&&track.getCapabilities){
+        var caps=track.getCapabilities();
+        if(caps.torch){var b=document.getElementById('torch-btn');if(b)b.style.display='block';}
+      }
       if('BarcodeDetector' in window){
-        var bd=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','qr_code','code_128']});
-        (function loop(){if(!scanOn)return;
-          bd.detect(cam).then(function(r){if(r.length&&scanOn){scanOn=false;closeScan();lookupCode(r[0].rawValue);}else setTimeout(loop,300);}).catch(function(){if(scanOn)setTimeout(loop,500);});
+        var bd=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','qr_code','code_128','code_39','itf']});
+        (function loop(){
+          if(!scanOn)return;
+          bd.detect(cam).then(function(r){
+            if(r.length&&scanOn){scanOn=false;closeScan();lookupCode(r[0].rawValue);}
+            else setTimeout(loop,250);
+          }).catch(function(){if(scanOn)setTimeout(loop,400);});
         })();
       } else {
-        var s=document.createElement('script');s.src='https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js';
+        var s=document.createElement('script');
+        s.src='https://unpkg.com/@zxing/library@0.20.0/umd/index.min.js';
         s.onload=function(){try{var rd=new ZXing.BrowserMultiFormatReader();window._zx=rd;
           rd.decodeFromVideoElement(cam).then(function(r){if(r&&scanOn){scanOn=false;closeScan();lookupCode(r.getText());}}).catch(function(){});
-        }catch(ex){}};document.head.appendChild(s);
+        }catch(ex){}};
+        document.head.appendChild(s);
       }
-    }).catch(function(e){closeScan();toast(e.name==='NotAllowedError'?'🚫 Kamerazugriff verweigert':'📷 Kamera nicht verfügbar');setTimeout(manualCode,300);});
+    }).catch(function(e){
+      closeScan();
+      toast(e.name==='NotAllowedError'?'\ud83d\udeab Kamerazugriff verweigert':'\ud83d\udcf7 Kamera nicht verf\u00fcgbar');
+      setTimeout(manualCode,300);
+    });
+}
+function toggleTorch(){
+  if(!scanStream)return;
+  var track=scanStream.getVideoTracks()[0];
+  if(!track)return;
+  torchOn=!torchOn;
+  track.applyConstraints({advanced:[{torch:torchOn}]})
+    .then(function(){
+      var btn=document.getElementById('torch-btn');
+      if(btn){
+        btn.textContent=torchOn?'\ud83d\udca1':'\ud83d\udd26';
+        btn.style.background=torchOn?'rgba(200,245,58,.3)':'rgba(255,255,255,.12)';
+      }
+    })
+    .catch(function(){toast('Taschenlampe nicht verf\u00fcgbar');torchOn=false;});
 }
 function closeScan(){
-  scanOn=false;document.getElementById('scanner').classList.remove('on');
+  if(torchOn&&scanStream){var t=scanStream.getVideoTracks()[0];if(t)try{t.applyConstraints({advanced:[{torch:false}]});}catch(e){}}
+  torchOn=false;scanOn=false;
+  document.getElementById('scanner').classList.remove('on');
   if(scanStream){scanStream.getTracks().forEach(function(t){t.stop();});scanStream=null;}
   if(window._zx){try{window._zx.reset();}catch(e){}window._zx=null;}
   document.getElementById('cam').srcObject=null;
 }
 function manualCode(){var c=prompt('Barcode-Nummer eingeben:');if(c&&c.trim().length>4)lookupCode(c.trim());}
 function lookupCode(code){
-  toast('🔍 Barcode '+code+'…');
-  var proxies=[
-    'https://api.codetabs.com/v1/proxy?quest=https://world.openfoodfacts.org/api/v0/product/'+code+'.json',
-    'https://corsproxy.io/?'+encodeURIComponent('https://world.openfoodfacts.org/api/v0/product/'+code+'.json'),
-    'https://api.allorigins.win/get?url='+encodeURIComponent('https://world.openfoodfacts.org/api/v0/product/'+code+'.json')
-  ];
-  var done=false;
-  function tryProxy(idx){
-    if(idx>=proxies.length||done){if(!done){done=true;toast('❌ Barcode nicht gefunden');}}return;
-    var url=proxies[idx];
-    var ctrl=new AbortController();setTimeout(function(){ctrl.abort();},3000);
-    fetch(url,{signal:ctrl.signal})
-      .then(function(r){return r.json();})
-      .then(function(resp){
-        if(done)return;done=true;
-        var d=resp.contents?JSON.parse(resp.contents):resp;
-        if(d.status===1&&d.product){var f=p2f(d.product);go('search');window._foods=[f];setTimeout(function(){openM(0);},300);}
-        else if(idx<proxies.length-1)tryProxy(idx+1);else toast('❌ Produkt nicht gefunden');
-      })
-      .catch(function(){if(!done&&idx<proxies.length-1)tryProxy(idx+1);else if(!done){done=true;toast('❌ Barcode nicht gefunden');}});
-  }
-  tryProxy(0);
+  toast('\ud83d\udd0d Suche Barcode...');
+  var ctrl=new AbortController();
+  setTimeout(function(){ctrl.abort();},8000);
+  fetch('https://world.openfoodfacts.org/api/v0/product/'+code+'.json',{signal:ctrl.signal})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d.status===1&&d.product){var f=p2f(d.product);go('search');window._foods=[f];setTimeout(function(){openM(0);},300);}
+      else toast('\u274c Produkt nicht gefunden');
+    }).catch(function(){toast('\u274c Netzwerkfehler');});
 }
+
 
 // ══ STATS ══
 function updStats(){
