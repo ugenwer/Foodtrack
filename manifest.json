@@ -1,0 +1,21 @@
+{
+  "name": "NutriTrack – Kalorien & Nährwerte",
+  "short_name": "NutriTrack",
+  "description": "Kostenloser Kalorien- und Nährwert-Tracker mit Barcode-Scanner",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='96' fill='%230a0a0a'/><text y='320' x='100' font-size='300'>🥗</text></svg>",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["health", "fitness", "food"],
+  "screenshots": [],
+  "lang": "de"
+}
