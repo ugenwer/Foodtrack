@@ -26,13 +26,6 @@
 - 🌙 **Dark Mode** (immer)
 - 📴 **Komplett kostenlos** – keine Werbung, kein Abo
 
-## 🌐 Kostenlos hosten mit GitHub Pages
-1. GitHub-Account erstellen
-2. Neues Repository erstellen
-3. `index.html` + `manifest.json` hochladen
-4. Settings → Pages → Branch: main → Save
-5. URL ist: `https://DEINNAME.github.io/REPO/`
-
 ## 🔌 Verwendete APIs (alle kostenlos)
 - **OpenFoodFacts** – Open Source Lebensmitteldatenbank
   - Freitextsuche: `https://world.openfoodfacts.org/cgi/search.pl`
