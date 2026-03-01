@@ -736,70 +736,135 @@ function doSearch(q){
 }
 
 function tryOnlineSearch(q, local) {
-  // Nutze den offiziellen OFF-API-Endpunkt der CORS korrekt setzt
-  // UND suche auch nach Hersteller (brands) via separatem Parameter
-  var url = 'https://world.openfoodfacts.org/cgi/search.pl?' + [
-    'search_terms=' + encodeURIComponent(q),
-    'search_simple=1',
-    'action=process',
-    'json=1',
-    'page_size=30',
-    'fields=product_name,brands,nutriments,categories_tags',
-    'sort_by=unique_scans_n'  // Beliebteste zuerst
-  ].join('&');
+  // Strategie: USDA FoodData Central (schnell, zuverlässig, CORS OK) +
+  //            OpenFoodFacts als Fallback (mehr deutsche Produkte)
+  var done = false;
 
-  var ctrl = new AbortController();
-  var tid = setTimeout(function(){ ctrl.abort(); }, 10000);
+  function finish(online) {
+    if (done) return;
+    done = true;
+    if (!online || !online.length) {
+      if (local.length) setStatus('orange', local.length + ' lokale Treffer');
+      else {
+        setStatus('red', 'Keine Ergebnisse');
+        document.getElementById('rlist').innerHTML =
+          '<div class="empty"><div class="empty-icon">😕</div>' +
+          '<p style="font-size:13px">Keine Ergebnisse für „' + q + '"</p></div>';
+      }
+      return;
+    }
+    var lnames = local.map(function(l) { return l.name.toLowerCase(); });
+    var merged = local.concat(online.filter(function(o) {
+      return lnames.indexOf(o.name.toLowerCase()) < 0;
+    }));
+    setStatus('dot', merged.length + ' Ergebnisse ✓');
+    window._foods = merged;
+    renderList(merged);
+  }
 
-  fetch(url, { signal: ctrl.signal })
-    .then(function(r){
-      clearTimeout(tid);
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      return r.json();
+  // ── API 1: USDA FoodData Central (kein API-Key, sehr schnell) ──
+  var usdaUrl = 'https://api.nal.usda.gov/fdc/v1/foods/search?' +
+    'query=' + encodeURIComponent(q) +
+    '&api_key=DEMO_KEY' +
+    '&pageSize=25' +
+    '&dataType=SR%20Legacy,Survey%20(FNDDS),Foundation';
+
+  var ctrl1 = new AbortController();
+  var t1 = setTimeout(function() { ctrl1.abort(); }, 6000);
+
+  fetch(usdaUrl, { signal: ctrl1.signal })
+    .then(function(r) { clearTimeout(t1); return r.json(); })
+    .then(function(data) {
+      var foods = (data.foods || []).map(usdaToFood).filter(function(f) { return f.kcal > 0; });
+      if (foods.length) finish(foods);
+      // auch wenn USDA Ergebnisse hat, OFF parallel laufen lassen für mehr Treffer
     })
-    .then(function(data){
-      var ql = q.toLowerCase();
-      var prods = (data.products||[]).filter(function(p){
-        if(!p.product_name) return false;
-        var n = p.nutriments||{};
-        var hasKcal = n['energy-kcal_100g']||n['energy-kcal']||n['energy_100g']||n['energy-kj_100g'];
-        return !!hasKcal;
+    .catch(function() { clearTimeout(t1); });
+
+  // ── API 2: OpenFoodFacts (mehr Markenprodukte, aber langsamer) ──
+  var offUrl = 'https://world.openfoodfacts.org/cgi/search.pl?' +
+    'search_terms=' + encodeURIComponent(q) +
+    '&search_simple=1&action=process&json=1&page_size=25' +
+    '&fields=product_name,brands,nutriments,categories_tags&sort_by=unique_scans_n';
+
+  var ctrl2 = new AbortController();
+  var t2 = setTimeout(function() { ctrl2.abort(); }, 12000);
+
+  fetch(offUrl, { signal: ctrl2.signal })
+    .then(function(r) { clearTimeout(t2); return r.json(); })
+    .then(function(data) {
+      var prods = (data.products || []).filter(function(p) {
+        return p.product_name && p.nutriments &&
+          (p.nutriments['energy-kcal_100g'] || p.nutriments['energy-kcal'] ||
+           p.nutriments['energy_100g'] || p.nutriments['energy-kj_100g']);
       });
-
-      if(!prods.length){
-        if(local.length) setStatus('orange',local.length+' lokale Treffer (Online: 0 Ergebnisse)');
-        else {
-          setStatus('red','Keine Ergebnisse');
-          document.getElementById('rlist').innerHTML='<div class="empty"><div class="empty-icon">😕</div>'+
-            '<p style="font-size:13px">Keine Ergebnisse für „'+q+'"</p></div>';
-        }
-        return;
-      }
-
-      var online = prods.map(offToFood);
-      var lnames = local.map(function(l){ return l.name.toLowerCase(); });
-      var merged = local.concat(online.filter(function(o){
-        return lnames.indexOf(o.name.toLowerCase()) < 0;
-      }));
-
-      setStatus('dot', merged.length+' Ergebnisse ✓');
-      window._foods = merged;
-      renderList(merged);
+      if (prods.length) finish(prods.map(offToFood));
+      else if (!done) finish([]);
     })
-    .catch(function(err){
-      clearTimeout(tid);
-      var msg = err && err.name === 'AbortError' ? 'Timeout (10s)' : (err ? err.message : 'Unbekannt');
-      if(local.length){
-        setStatus('orange', local.length+' lokale Treffer · Online-Fehler: '+msg);
-      } else {
-        setStatus('red', 'Netzwerkfehler: '+msg);
-        document.getElementById('rlist').innerHTML='<div class="empty"><div class="empty-icon">📵</div>'+
-          '<p style="font-size:13px">Verbindungsfehler:<br><b>'+msg+'</b><br><br>'+
-          'Protokoll: '+location.protocol+'<br>'+
-          'Host: '+location.hostname+'<br><br>'+
-          'Prüfe deine Internetverbindung<br>und ob die App über HTTPS läuft.</p></div>';
-      }
+    .catch(function() {
+      clearTimeout(t2);
+      if (!done) finish([]);
     });
+
+  // ── Fallback nach 13s: zeige was da ist ──
+  setTimeout(function() {
+    if (!done) {
+      done = true;
+      if (local.length) setStatus('orange', local.length + ' lokale Treffer (Online-Timeout)');
+      else {
+        setStatus('red', 'Timeout – keine Verbindung');
+        document.getElementById('rlist').innerHTML =
+          '<div class="empty"><div class="empty-icon">📵</div>' +
+          '<p style="font-size:13px">Online-Suche hat nicht geantwortet.<br><br>' +
+          'Prüfe deine Internetverbindung.</p></div>';
+      }
+    }
+  }, 13000);
+}
+
+function usdaToFood(item) {
+  var nutrients = item.foodNutrients || [];
+  function getNut(id, name) {
+    var n = nutrients.find(function(n) {
+      return n.nutrientId === id || (n.nutrientName && n.nutrientName.indexOf(name) >= 0);
+    });
+    return n ? Math.round((n.value || 0) * 10) / 10 : 0;
+  }
+  var kcal = getNut(1008, 'Energy') || getNut(2047, 'Energy') || getNut(1062, 'Energy');
+  // USDA gibt Energie manchmal in kJ (id 1062)
+  if (kcal > 1000) kcal = Math.round(kcal / 4.184);
+
+  var name = (item.description || 'Unbekannt');
+  // Kürze USDA-Namen (oft in Caps): "APPLE, RAW" → "Apple, raw"
+  name = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+  name = name.substring(0, 60);
+
+  var brand = item.brandOwner || item.brandName || '';
+  var cat = (item.foodCategory || '').toLowerCase();
+  var e = '🍽️';
+  if (cat.indexOf('dairy') >= 0 || cat.indexOf('milk') >= 0 || cat.indexOf('cheese') >= 0) e = '🥛';
+  else if (cat.indexOf('beef') >= 0 || cat.indexOf('pork') >= 0 || cat.indexOf('poultry') >= 0 || cat.indexOf('meat') >= 0) e = '🥩';
+  else if (cat.indexOf('fish') >= 0 || cat.indexOf('seafood') >= 0) e = '🐟';
+  else if (cat.indexOf('vegetable') >= 0) e = '🥦';
+  else if (cat.indexOf('fruit') >= 0) e = '🍎';
+  else if (cat.indexOf('grain') >= 0 || cat.indexOf('bread') >= 0 || cat.indexOf('cereal') >= 0) e = '🍞';
+  else if (cat.indexOf('beverage') >= 0) e = '🥤';
+  else if (cat.indexOf('sweet') >= 0 || cat.indexOf('candy') >= 0 || cat.indexOf('sugar') >= 0) e = '🍫';
+  else if (cat.indexOf('egg') >= 0) e = '🥚';
+  else if (cat.indexOf('nut') >= 0 || cat.indexOf('seed') >= 0) e = '🌰';
+  else if (cat.indexOf('oil') >= 0 || cat.indexOf('fat') >= 0) e = '🫒';
+
+  return {
+    name: name, b: brand, e: e,
+    kcal: Math.round(kcal) || 0,
+    p: getNut(1003, 'Protein'),
+    c: getNut(1005, 'Carbohydrate'),
+    f: getNut(1004, 'Total lipid'),
+    fi: getNut(1079, 'Fiber'),
+    s: getNut(2000, 'Sugars') || getNut(1063, 'Sugars'),
+    sa: Math.round((getNut(1093, 'Sodium') / 400) * 10) / 10, // Natrium → Salz
+    src: 'usda'
+  };
 }
 
 function offToFood(p){
