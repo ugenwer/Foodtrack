@@ -224,6 +224,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
     </div>
   </div>
   <div id="meals-wrap"></div>
+  <div style="display:flex;gap:8px;padding:0 12px 10px">
+    <button class="afb" style="flex:1;background:var(--a2);border:none;color:#000;font-weight:700;cursor:pointer;border-radius:12px;font-size:14px" onclick="loadSavedMeal()">📋 Gespeicherte Mahlzeiten</button>
+  </div>
   <div class="sp"></div>
 </div>
 
@@ -325,6 +328,14 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
     <div class="mhd"><div class="mtn" id="m-name">–</div><div class="mtb" id="m-brand"></div></div>
     <div class="mbd">
       <div class="msr">
+        <span class="msl">Portion</span>
+        <div style="display:flex;gap:6px">
+          <button class="mch" style="flex:1;padding:6px;font-size:12px" onclick="setPortion(50)">Klein</button>
+          <button class="mch on" style="flex:1;padding:6px;font-size:12px" onclick="setPortion(100)">Mittel</button>
+          <button class="mch" style="flex:1;padding:6px;font-size:12px" onclick="setPortion(150)">Groß</button>
+        </div>
+      </div>
+      <div class="msr">
         <span class="msl">Menge</span>
         <div class="msiw">
           <button onclick="dg(-10)" style="background:none;border:none;color:var(--t2);font-size:17px;cursor:pointer;width:22px">−</button>
@@ -341,7 +352,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
         <button class="mch" data-m="Abendessen">🌙 Abendessen</button>
         <button class="mch" data-m="Snack">🍎 Snack</button>
       </div>
-      <button class="afb" onclick="addF()">+ Hinzufügen</button>
+      <div style="display:flex;gap:8px">
+        <button class="afb" style="flex:1;background:var(--a)" onclick="addF()">+ Hinzufügen</button>
+        <button class="afb" style="flex:1;background:var(--a2)" onclick="toggleFav()"><span id="fav-icon">☆</span></button>
+      </div>
+      <button class="afb" onclick="saveMealDialog()" style="background:var(--a3);margin-top:8px">💾 Mahlzeit speichern</button>
     </div>
   </div>
 </div>
@@ -568,7 +583,7 @@ const DB = [
 
 // ══ STATE ══
 const TODAY=new Date().toISOString().split('T')[0];
-function mkS(){return{profile:{name:'',age:'',weight:'',height:'',gCal:2000,gP:120,gC:250,gF:70},log:{},steps:{},recent:[]};}
+function mkS(){return{profile:{name:'',age:'',weight:'',height:'',gCal:2000,gP:120,gC:250,gF:70},log:{},steps:{},recent:[],favorites:[],savedMeals:[]};}
 let S=mkS();
 try{const r=localStorage.getItem('nt5');if(r){const p=JSON.parse(r);S={...mkS(),...p};S.profile={...mkS().profile,...(p.profile||{})};S.steps=p.steps||{};S.recent=p.recent||[];}}catch(e){}
 function save(){try{localStorage.setItem('nt5',JSON.stringify(S));}catch(e){}}
@@ -678,6 +693,7 @@ function delF(i){if(!confirm('Eintrag löschen?'))return;(S.log[TODAY]||[]).spli
 window._foods=[];
 var selM='Frühstück';
 var _offCache={};
+var _curFav=false;
 function showEmpty(){
   setSt('','');
   document.getElementById('rlist').innerHTML=
@@ -698,7 +714,6 @@ function setSt(cls,txt){
 }
 function doSearch(q){
   var ql=q.toLowerCase();
-  // Suche in Name UND Hersteller UND Synonymen
   var local=DB.filter(function(f){
     var nm=f.n.toLowerCase();
     var br=(f.b||'').toLowerCase();
@@ -706,10 +721,20 @@ function doSearch(q){
     var combined=nm+' '+br;
     return words.every(function(w){return combined.indexOf(w)>=0;});
   });
-  if(local.length){
-    setSt('o','Lokale DB: '+local.length+' Treffer');
-    window._foods=local;
-    renderList(local);
+  var favs=(S.favorites||[]).filter(function(f){
+    var nm=f.n.toLowerCase();
+    var br=(f.b||'').toLowerCase();
+    var words=ql.split(/\s+/).filter(Boolean);
+    var combined=nm+' '+br;
+    return words.every(function(w){return combined.indexOf(w)>=0;});
+  });
+  var all=favs.concat(local);
+  var seen={};
+  all=all.filter(function(f){if(seen[f.n])return false;seen[f.n]=true;return true;});
+  if(all.length){
+    setSt('o','Lokale DB: '+local.length+' Treffer'+(favs.length?' · ⭐ '+favs.length+' Favorit(en)':''));
+    window._foods=all;
+    renderList(all);
   } else {
     document.getElementById('rlist').innerHTML='<div style="text-align:center;padding:32px;color:var(--t2)"><div class="spin"></div>Suche…</div>';
   }
@@ -804,17 +829,38 @@ function renderList(foods){
 
 // ══ MODAL ══
 var curF=null;
+function setPortion(g){document.getElementById('m-g').value=g;updM();document.querySelectorAll('div[style*="display:flex;gap:6px"] .mch').forEach(function(b){b.classList.remove('on');});event.target.classList.add('on');}
 function openM(i){
   curF=window._foods[i];if(!curF)return;
+  _curFav=(S.favorites||[]).some(function(f){return f.n===curF.n;});
   document.getElementById('m-name').textContent=curF.n;
   document.getElementById('m-brand').textContent=curF.b||'';
   document.getElementById('m-g').value=100;
+  document.getElementById('fav-icon').textContent=_curFav?'★':'☆';
   document.querySelectorAll('.mch').forEach(function(c){
     c.classList.toggle('on',c.dataset.m===selM);
     c.onclick=function(){selM=c.dataset.m;document.querySelectorAll('.mch').forEach(function(x){x.classList.remove('on');});c.classList.add('on');};
   });
   updM();
   document.getElementById('mbg').classList.add('on');
+}
+function toggleFav(){
+  if(!curF)return;
+  var idx=(S.favorites||[]).findIndex(function(f){return f.n===curF.n;});
+  if(idx>=0){S.favorites.splice(idx,1);_curFav=false;toast('⭐ Aus Favoriten entfernt');} else {if(!S.favorites)S.favorites=[];S.favorites.push(curF);_curFav=true;toast('⭐ Zu Favoriten hinzugefügt');}
+  save();
+  document.getElementById('fav-icon').textContent=_curFav?'★':'☆';
+}
+function saveMealDialog(){
+  var name=prompt('Mahlzeitname (z.B. "Fitness-Frühstück"):');
+  if(!name||!name.trim())return;
+  if(!S.savedMeals)S.savedMeals=[];
+  var entry=S.log[TODAY]||[];
+  var meal=entry.filter(function(f){return f.meal===selM;});
+  if(!meal.length){toast('❌ Keine Lebensmittel in dieser Mahlzeit');return;}
+  S.savedMeals.push({name:name,meal:selM,foods:meal.map(function(f){return{n:f.food.n,b:f.food.b,e:f.food.e,k:f.food.k,p:f.food.p,c:f.food.c,f:f.food.f,fi:f.food.fi,s:f.food.s,sa:f.food.sa,grams:f.grams};})});
+  save();
+  toast('💾 Mahlzeit "'+name+'" gespeichert');
 }
 function updM(){
   if(!curF)return;
@@ -843,6 +889,17 @@ function addF(){
   S.log[TODAY].push({food:curF,grams:g,meal:selM,ts:Date.now()});
   S.recent=[curF].concat((S.recent||[]).filter(function(f){return f.n!==curF.n;})).slice(0,20);
   save();closeM();updH();toast('✅ '+curF.n+' hinzugefügt');
+}
+function loadSavedMeal(){
+  if(!S.savedMeals||!S.savedMeals.length){toast('Keine gespeicherten Mahlzeiten');return;}
+  var opt=S.savedMeals.map(function(m,i){return i+': '+m.name+' ('+m.meal+')'}).join('\n');
+  var idx=prompt('Wähle eine Mahlzeit:\n\n'+opt+'\n\nNummer eingeben:');
+  if(idx===null)return;
+  var meal=S.savedMeals[+idx];
+  if(!meal){toast('Ungültige Auswahl');return;}
+  if(!S.log[TODAY])S.log[TODAY]=[];
+  meal.foods.forEach(function(f){S.log[TODAY].push({food:f,grams:f.grams,meal:meal.meal,ts:Date.now()});});
+  save();updH();go('home');toast('✅ Mahlzeit "'+meal.name+'" hinzugefügt');
 }
 
 // ══ SCANNER ══
