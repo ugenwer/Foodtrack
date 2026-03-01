@@ -712,60 +712,104 @@ function doSearch(q){
     return;
   }
 
-  var ctrl=new AbortController();
-  var tid=setTimeout(function(){ ctrl.abort(); },7000);
-  var url='https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=24&fields=product_name,brands,nutriments,categories_tags&lc=de';
+  // Try multiple API endpoints in sequence
+  tryOnlineSearch(q, local);
+}
 
-  fetch(url,{signal:ctrl.signal})
-    .then(function(r){ clearTimeout(tid); return r.json(); })
-    .then(function(data){
-      var prods=(data.products||[]).filter(function(p){
-        return p.product_name&&(p.nutriments&&(p.nutriments['energy-kcal_100g']||p.nutriments['energy-kcal']));
-      });
-      if(prods.length){
-        var online=prods.map(offToFood);
-        var lnames=local.map(function(l){ return l.name.toLowerCase(); });
-        var merged=local.concat(online.filter(function(o){ return lnames.indexOf(o.name.toLowerCase())<0; }));
-        setStatus('dot',''+merged.length+' Ergebnisse');
-        window._foods=merged;
-        renderList(merged);
-      } else if(local.length){
-        setStatus('orange',''+local.length+' lokale Treffer');
-      } else {
-        setStatus('red','Keine Ergebnisse');
-        document.getElementById('rlist').innerHTML='<div class="empty"><div class="empty-icon">😕</div><p style="font-size:13px">Keine Ergebnisse für „'+q+'"</p></div>';
+function tryOnlineSearch(q, local) {
+  // API endpoints to try in order
+  var endpoints = [
+    // OpenFoodFacts v2 (neuere API, bessere CORS-Header)
+    'https://world.openfoodfacts.org/api/v2/search?search_terms=' + encodeURIComponent(q) + '&page_size=24&fields=product_name,brands,nutriments,categories_tags',
+    // OpenFoodFacts v1 classic
+    'https://world.openfoodfacts.org/cgi/search.pl?search_terms=' + encodeURIComponent(q) + '&search_simple=1&action=process&json=1&page_size=24&fields=product_name,brands,nutriments,categories_tags',
+  ];
+  var idx = 0;
+
+  function tryNext() {
+    if (idx >= endpoints.length) {
+      // All failed
+      if (local.length) setStatus('orange', local.length + ' lokale Treffer (kein Internet)');
+      else {
+        setStatus('red', 'Kein Internet / API nicht erreichbar');
+        document.getElementById('rlist').innerHTML =
+          '<div class="empty"><div class="empty-icon">📵</div>' +
+          '<p style="font-size:13px">Keine Verbindung zu OpenFoodFacts.<br><br>' +
+          '✅ Stelle sicher, dass die App über<br><b style="color:var(--accent)">GitHub Pages (HTTPS)</b><br>geöffnet ist.<br><br>' +
+          '🔄 Manchmal hilft auch ein<br>Neuladen der Seite.</p></div>';
       }
-    })
-    .catch(function(){
-      clearTimeout(tid);
-      if(local.length) setStatus('orange','Offline: '+local.length+' lokale Treffer');
-      else setStatus('red','Netzwerkfehler');
-    });
+      return;
+    }
+    var url = endpoints[idx++];
+    var ctrl = new AbortController();
+    var tid = setTimeout(function() { ctrl.abort(); }, 8000);
+
+    fetch(url, { signal: ctrl.signal, mode: 'cors' })
+      .then(function(r) {
+        clearTimeout(tid);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(data) {
+        // v2 uses 'products', v1 also uses 'products'
+        var prods = (data.products || []).filter(function(p) {
+          return p.product_name && p.nutriments &&
+            (p.nutriments['energy-kcal_100g'] || p.nutriments['energy-kcal'] || p.nutriments['energy_100g']);
+        });
+        if (prods.length) {
+          var online = prods.map(offToFood);
+          var lnames = local.map(function(l) { return l.name.toLowerCase(); });
+          var merged = local.concat(online.filter(function(o) {
+            return lnames.indexOf(o.name.toLowerCase()) < 0;
+          }));
+          setStatus('dot', merged.length + ' Ergebnisse (Online + Lokal)');
+          window._foods = merged;
+          renderList(merged);
+        } else if (local.length) {
+          setStatus('orange', local.length + ' lokale Treffer');
+        } else {
+          setStatus('red', 'Keine Ergebnisse für "' + q + '"');
+          document.getElementById('rlist').innerHTML =
+            '<div class="empty"><div class="empty-icon">😕</div><p style="font-size:13px">Keine Ergebnisse gefunden</p></div>';
+        }
+      })
+      .catch(function(err) {
+        clearTimeout(tid);
+        // Try next endpoint
+        tryNext();
+      });
+  }
+  tryNext();
 }
 
 function offToFood(p){
   var n=p.nutriments||{};
+  // kcal: try kcal_100g first, then kcal, then convert from kJ
+  var kcal = n['energy-kcal_100g'] || n['energy-kcal'] ||
+             (n['energy-kj_100g'] ? Math.round(n['energy-kj_100g'] / 4.184) :
+             (n['energy_100g'] ? Math.round(n['energy_100g'] / 4.184) : 0));
   var cats=(p.categories_tags||[]).join(' ');
   var e='🍽️';
   if(cats.indexOf('dairy')>=0||cats.indexOf('milch')>=0) e='🥛';
-  else if(cats.indexOf('meat')>=0||cats.indexOf('fleisch')>=0) e='🥩';
-  else if(cats.indexOf('fish')>=0||cats.indexOf('fisch')>=0) e='🐟';
+  else if(cats.indexOf('meat')>=0||cats.indexOf('fleisch')>=0||cats.indexOf('poultry')>=0) e='🥩';
+  else if(cats.indexOf('fish')>=0||cats.indexOf('fisch')>=0||cats.indexOf('seafood')>=0) e='🐟';
   else if(cats.indexOf('vegetable')>=0||cats.indexOf('gemuse')>=0) e='🥦';
   else if(cats.indexOf('fruit')>=0||cats.indexOf('obst')>=0) e='🍎';
-  else if(cats.indexOf('bread')>=0||cats.indexOf('brot')>=0||cats.indexOf('cereal')>=0) e='🍞';
-  else if(cats.indexOf('beverage')>=0||cats.indexOf('drink')>=0) e='🥤';
-  else if(cats.indexOf('sweet')>=0||cats.indexOf('chocolate')>=0) e='🍫';
-  else if(cats.indexOf('egg')>=0) e='🥚';
+  else if(cats.indexOf('bread')>=0||cats.indexOf('brot')>=0||cats.indexOf('cereal')>=0||cats.indexOf('pasta')>=0) e='🍞';
+  else if(cats.indexOf('beverage')>=0||cats.indexOf('drink')>=0||cats.indexOf('getr')>=0) e='🥤';
+  else if(cats.indexOf('sweet')>=0||cats.indexOf('chocolate')>=0||cats.indexOf('schokolade')>=0) e='🍫';
+  else if(cats.indexOf('egg')>=0||cats.indexOf('ei')>=0) e='🥚';
+  else if(cats.indexOf('nut')>=0||cats.indexOf('nuss')>=0) e='🌰';
   return{
     name:(p.product_name||'Unbekannt').substring(0,60),
-    b:p.brands||'',e:e,
-    kcal:Math.round(n['energy-kcal_100g']||n['energy-kcal']||0),
-    p:Math.round((n.proteins_100g||0)*10)/10,
-    c:Math.round((n.carbohydrates_100g||0)*10)/10,
-    f:Math.round((n.fat_100g||0)*10)/10,
-    fi:Math.round((n.fiber_100g||0)*10)/10,
-    s:Math.round((n.sugars_100g||0)*10)/10,
-    sa:Math.round((n.salt_100g||0)*10)/10,
+    b:(p.brands||'').substring(0,30), e:e,
+    kcal: Math.round(kcal)||0,
+    p: Math.round((n.proteins_100g||n['proteins-dry-matter_100g']||0)*10)/10,
+    c: Math.round((n.carbohydrates_100g||0)*10)/10,
+    f: Math.round((n.fat_100g||0)*10)/10,
+    fi: Math.round((n.fiber_100g||0)*10)/10,
+    s: Math.round((n.sugars_100g||0)*10)/10,
+    sa: Math.round((n.salt_100g||0)*10)/10,
     src:'off'
   };
 }
