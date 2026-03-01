@@ -368,10 +368,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
 // ══════════════════════════════════════════════════════
 //  DATENBANK  –  500+ Einträge, Suche nach Name + Marke
 // ══════════════════════════════════════════════════════
-const DB = [
-// OBST
-{n:'Apfel',e:'🍎',k:52,p:0.3,c:14,f:0.2,fi:2.4,s:10,sa:0,b:''},
-{n:'Birne',e:'🍐',k:57,p:0.4,c:15,f:0.1,fi:3.1,s:10,sa:0,b:''},
+// Lokale DB entfernt - vollständig Online-Suche optimiert,
 {n:'Banane',e:'🍌',k:89,p:1.1,c:23,f:0.3,fi:2.6,s:12,sa:0,b:''},
 {n:'Orange',e:'🍊',k:47,p:0.9,c:12,f:0.1,fi:2.4,s:9,sa:0,b:''},
 {n:'Mandarine',e:'🍊',k:53,p:0.9,c:13,f:0.3,fi:1.8,s:11,sa:0,b:''},
@@ -578,9 +575,6 @@ const DB = [
 {n:'Tiramisu',e:'🍰',k:283,p:5.8,c:27,f:17,fi:0.4,s:14,sa:0.1,b:''},
 {n:'Muffin',e:'🧁',k:378,p:5.7,c:56,f:15,fi:1.4,s:29,sa:0.5,b:''},
 {n:'Croissant',e:'🥐',k:406,p:8.2,c:46,f:21,fi:2.6,s:9.6,sa:0.7,b:''},
-{n:'Waffel',e:'🧇',k:350,p:7,c:50,f:14,fi:1,s:15,sa:0.5,b:''},
-];
-
 // ══ STATE ══
 const TODAY=new Date().toISOString().split('T')[0];
 function mkS(){return{profile:{name:'',age:'',weight:'',height:'',gCal:2000,gP:120,gC:250,gF:70},log:{},steps:{},recent:[],favorites:[],savedMeals:[]};}
@@ -695,10 +689,14 @@ var selM='Frühstück';
 var _offCache={};
 var _curFav=false;
 function showEmpty(){
-  setSt('','');
-  document.getElementById('rlist').innerHTML=
-    '<div class="empty"><div class="ei">🔍</div><p style="font-size:13px">Tippe einen Lebensmittelnamen ein<br>'+
-    '<span style="color:var(--t3);font-size:11px">'+DB.length+' eingebaute Lebensmittel · Online-Suche via GitHub Pages</span></p></div>';
+  setSt('');
+  var recents=(S.recent||[]).slice(0,5);
+  var favs=(S.favorites||[]).slice(0,5);
+  var html='<div class="empty"><div class="ei">🔍</div><p style="font-size:13px">Tippe einen Lebensmittelnamen ein</p>';
+  if(favs.length){html+='<div style="margin-top:12px;padding:0 12px"><div style="font-size:11px;color:var(--t2);margin-bottom:6px">⭐ Favoriten</div>'+favs.map(function(f,i){return '<div class="ri" onclick="openM('+window._foods.indexOf(f)+')" style="cursor:pointer"><div class="ric">'+f.e+'</div><div class="rin"><div class="rn2">'+f.n+'</div></div></div>';}).join('')+'</div>';}
+  if(recents.length&&!favs.length){html+='<div style="margin-top:12px;padding:0 12px"><div style="font-size:11px;color:var(--t2);margin-bottom:6px">🕐 Zuletzt verwendet</div>'+recents.map(function(f,i){return '<div class="ri" onclick="openM('+window._foods.indexOf(f)+')" style="cursor:pointer"><div class="ric">'+f.e+'</div><div class="rin"><div class="rn2">'+f.n+'</div></div></div>';}).join('')+'</div>';}
+  html+='<div style="padding:0 12px;margin-top:12px;font-size:11px;color:var(--t3)">Online-Suche · Powered by OpenFoodFacts</div></div>';
+  document.getElementById('rlist').innerHTML=html;
 }
 function clearSearch(){
   document.getElementById('si').value='';
@@ -706,63 +704,44 @@ function clearSearch(){
   showEmpty();
   document.getElementById('si').focus();
 }
-function setSt(cls,txt){
+function setSt(icon,txt){
   var el=document.getElementById('stbar');
   if(!txt){el.classList.remove('on');return;}
   el.classList.add('on');
-  el.innerHTML='<div class="dot '+cls+'"></div><span>'+txt+'</span>';
+  el.innerHTML='<span style="font-size:14px;margin-right:6px">'+icon+'</span><span>'+txt+'</span>';
 }
 function doSearch(q){
   var ql=q.toLowerCase();
-  var local=DB.filter(function(f){
-    var nm=f.n.toLowerCase();
-    var br=(f.b||'').toLowerCase();
-    var words=ql.split(/\s+/).filter(Boolean);
-    var combined=nm+' '+br;
-    return words.every(function(w){return combined.indexOf(w)>=0;});
-  });
-  var favs=(S.favorites||[]).filter(function(f){
-    var nm=f.n.toLowerCase();
-    var br=(f.b||'').toLowerCase();
-    var words=ql.split(/\s+/).filter(Boolean);
-    var combined=nm+' '+br;
-    return words.every(function(w){return combined.indexOf(w)>=0;});
-  });
-  var all=favs.concat(local);
-  var seen={};
-  all=all.filter(function(f){if(seen[f.n])return false;seen[f.n]=true;return true;});
+  var cacheKey='off_'+ql;
+  // Zeige Loading + Favoriten/Recent
+  var recents=(S.recent||[]).slice(0,3).filter(function(r){return r.n.toLowerCase().indexOf(ql)>=0;});
+  var favs=(S.favorites||[]).filter(function(f){return f.n.toLowerCase().indexOf(ql)>=0;});
+  var all=favs.concat(recents);
   if(all.length){
-    setSt('o','Lokale DB: '+local.length+' Treffer'+(favs.length?' · ⭐ '+favs.length+' Favorit(en)':''));
+    setSt('💫','Suche läuft…');
     window._foods=all;
     renderList(all);
   } else {
     document.getElementById('rlist').innerHTML='<div style="text-align:center;padding:32px;color:var(--t2)"><div class="spin"></div>Suche…</div>';
   }
-  // Online-Suche (asynchron, nicht blockierend)
-  var cacheKey='off_'+ql;
+  // Check Cache
   if(_offCache[cacheKey]){
     var cached=_offCache[cacheKey];
-    if(local.length){
-      var lnm=local.map(function(l){return l.n.toLowerCase();});
-      var merged=local.concat(cached.filter(function(o){return lnm.indexOf(o.n.toLowerCase())<0;}));
-      setSt('g',merged.length+' Ergebnisse ✓');
-      window._foods=merged;
-      renderList(merged);
-    } else {
-      setSt('g',cached.length+' Online-Ergebnisse');
-      window._foods=cached;
-      renderList(cached);
-    }
+    var merge=favs.concat(cached.filter(function(o){
+      return !favs.some(function(f){return f.n===o.n;})&&!recents.some(function(r){return r.n===o.n;});
+    }));
+    setSt('✓',merge.length+' Ergebnisse');
+    window._foods=merge;
+    renderList(merge);
     return;
   }
-  // Neue Online-Anfrage
-  searchOnline(q,local,cacheKey);
+  searchOnline(q,cacheKey);
 }
-function searchOnline(q,local,cacheKey){
+function searchOnline(q,cacheKey){
   var url='https://thingproxy.freeboard.io/fetch/https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+
-    '&search_simple=1&action=process&json=1&page_size=12&fields=product_name,brands,nutriments,categories_tags';
+    '&search_simple=1&action=process&json=1&page_size=20&fields=product_name,brands,nutriments,categories_tags&sort_by=unique_scans_n';
   var done=false,ctrl=new AbortController();
-  var tid=setTimeout(function(){ctrl.abort();},5000);
+  var tid=setTimeout(function(){ctrl.abort();},4000);
   fetch(url,{signal:ctrl.signal})
     .then(function(r){clearTimeout(tid);return r.json();})
     .then(function(data){
@@ -772,23 +751,22 @@ function searchOnline(q,local,cacheKey){
         var n=p.nutriments||{};
         return n['energy-kcal_100g']||n['energy-kcal']||n['energy_100g']||n['energy-kj_100g'];
       });
-      if(!prods.length){
-        if(local.length)setSt('o',local.length+' lokale Treffer');
-        else{setSt('r','Keine Ergebnisse');document.getElementById('rlist').innerHTML='<div class="empty"><div class="ei">😕</div><p style="font-size:13px">Keine Ergebnisse für „'+q+'"</p></div>';}
-        return;
-      }
       var online=prods.map(p2f);
       _offCache[cacheKey]=online;
-      var lnm=local.map(function(l){return l.n.toLowerCase();});
-      var merged=local.concat(online.filter(function(o){return lnm.indexOf(o.n.toLowerCase())<0;}));
-      setSt('g',merged.length+' Ergebnisse ✓');
+      var favs=(S.favorites||[]).filter(function(f){return f.n.toLowerCase().indexOf(q.toLowerCase())>=0;});
+      var recents=(S.recent||[]).slice(0,3).filter(function(r){return r.n.toLowerCase().indexOf(q.toLowerCase())>=0;});
+      var merged=favs.concat(recents).concat(online.filter(function(o){
+        return !favs.some(function(f){return f.n===o.n;})&&!recents.some(function(r){return r.n===o.n;});
+      }));
+      if(!merged.length){setSt('r','Keine Ergebnisse');document.getElementById('rlist').innerHTML='<div class="empty"><div class="ei">😕</div><p style="font-size:13px">Keine Ergebnisse für „'+q+'"</p></div>';return;}
+      setSt('✓',merged.length+' Ergebnisse');
       window._foods=merged;
       renderList(merged);
     })
     .catch(function(){
       clearTimeout(tid);if(done)return;done=true;
-      if(local.length)setSt('o',local.length+' lokale Treffer (Online-Fehler)');
-      else{setSt('r','Online nicht erreichbar');document.getElementById('rlist').innerHTML='<div class="empty"><div class="ei">📵</div><p style="font-size:13px">Keine Verbindung zu OpenFoodFacts.<br>Lokale DB hat '+DB.length+' Einträge.</p></div>';}
+      setSt('⚠️','Netzwerkfehler');
+      document.getElementById('rlist').innerHTML='<div class="empty"><div class="ei">📵</div><p style="font-size:13px">Verbindung zu OpenFoodFacts fehlgeschlagen.<br>Bitte versuchen Sie es später erneut.</p></div>';
     });
 }
 function p2f(p){
