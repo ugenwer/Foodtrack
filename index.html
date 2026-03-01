@@ -677,6 +677,7 @@ function delF(i){if(!confirm('Eintrag löschen?'))return;(S.log[TODAY]||[]).spli
 // ══ SEARCH ══
 window._foods=[];
 var selM='Frühstück';
+var _offCache={};
 function showEmpty(){
   setSt('','');
   document.getElementById('rlist').innerHTML=
@@ -701,41 +702,63 @@ function doSearch(q){
   var local=DB.filter(function(f){
     var nm=f.n.toLowerCase();
     var br=(f.b||'').toLowerCase();
-    // Tokenweise suchen: "griechischer joghurt" → beide Wörter müssen vorkommen
     var words=ql.split(/\s+/).filter(Boolean);
     var combined=nm+' '+br;
     return words.every(function(w){return combined.indexOf(w)>=0;});
   });
   if(local.length){
-    setSt('o','Lokale DB: '+local.length+' Treffer'+(location.protocol==='https:'?' · Online-Suche läuft…':''));
+    setSt('o','Lokale DB: '+local.length+' Treffer');
     window._foods=local;
     renderList(local);
   } else {
     document.getElementById('rlist').innerHTML='<div style="text-align:center;padding:32px;color:var(--t2)"><div class="spin"></div>Suche…</div>';
   }
-  // Online-Suche via CORS-Proxy
-  var url='https://api.allorigins.win/get?url='+encodeURIComponent(
-    'https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+
-    '&search_simple=1&action=process&json=1&page_size=30&fields=product_name,brands,nutriments,categories_tags&sort_by=unique_scans_n'
-  );
+  // Online-Suche (asynchron, nicht blockierend)
+  var cacheKey='off_'+ql;
+  if(_offCache[cacheKey]){
+    var cached=_offCache[cacheKey];
+    if(local.length){
+      var lnm=local.map(function(l){return l.n.toLowerCase();});
+      var merged=local.concat(cached.filter(function(o){return lnm.indexOf(o.n.toLowerCase())<0;}));
+      setSt('g',merged.length+' Ergebnisse ✓');
+      window._foods=merged;
+      renderList(merged);
+    } else {
+      setSt('g',cached.length+' Online-Ergebnisse');
+      window._foods=cached;
+      renderList(cached);
+    }
+    return;
+  }
+  // Neue Online-Anfrage
+  searchOnline(q,local,cacheKey);
+}
+function searchOnline(q,local,cacheKey){
+  var url='https://thingproxy.freeboard.io/fetch/https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+
+    '&search_simple=1&action=process&json=1&page_size=12&fields=product_name,brands,nutriments,categories_tags';
   var done=false,ctrl=new AbortController();
-  var tid=setTimeout(function(){ctrl.abort();},12000);
+  var tid=setTimeout(function(){ctrl.abort();},5000);
   fetch(url,{signal:ctrl.signal})
     .then(function(r){clearTimeout(tid);return r.json();})
-    .then(function(resp){
+    .then(function(data){
       if(done)return;done=true;
-      var data=JSON.parse(resp.contents);
       var prods=(data.products||[]).filter(function(p){
         if(!p.product_name)return false;
         var n=p.nutriments||{};
         return n['energy-kcal_100g']||n['energy-kcal']||n['energy_100g']||n['energy-kj_100g'];
       });
-      if(!prods.length){if(local.length)setSt('o',local.length+' lokale Treffer');else{setSt('r','Keine Ergebnisse');document.getElementById('rlist').innerHTML='<div class="empty"><div class="ei">😕</div><p style="font-size:13px">Keine Ergebnisse für „'+q+'"</p></div>';}return;}
+      if(!prods.length){
+        if(local.length)setSt('o',local.length+' lokale Treffer');
+        else{setSt('r','Keine Ergebnisse');document.getElementById('rlist').innerHTML='<div class="empty"><div class="ei">😕</div><p style="font-size:13px">Keine Ergebnisse für „'+q+'"</p></div>';}
+        return;
+      }
       var online=prods.map(p2f);
+      _offCache[cacheKey]=online;
       var lnm=local.map(function(l){return l.n.toLowerCase();});
       var merged=local.concat(online.filter(function(o){return lnm.indexOf(o.n.toLowerCase())<0;}));
       setSt('g',merged.length+' Ergebnisse ✓');
-      window._foods=merged;renderList(merged);
+      window._foods=merged;
+      renderList(merged);
     })
     .catch(function(){
       clearTimeout(tid);if(done)return;done=true;
@@ -854,16 +877,15 @@ function closeScan(){
 function manualCode(){var c=prompt('Barcode-Nummer eingeben:');if(c&&c.trim().length>4)lookupCode(c.trim());}
 function lookupCode(code){
   toast('🔍 Barcode '+code+'…');
-  var ctrl=new AbortController();setTimeout(function(){ctrl.abort();},8000);
+  var ctrl=new AbortController();setTimeout(function(){ctrl.abort();},6000);
   var apiUrl='https://world.openfoodfacts.org/api/v0/product/'+code+'.json';
-  var proxyUrl='https://api.allorigins.win/get?url='+encodeURIComponent(apiUrl);
+  var proxyUrl='https://thingproxy.freeboard.io/fetch/'+apiUrl;
   fetch(proxyUrl,{signal:ctrl.signal})
     .then(function(r){return r.json();})
-    .then(function(resp){
-      var d=JSON.parse(resp.contents);
+    .then(function(d){
       if(d.status===1&&d.product){var f=p2f(d.product);go('search');window._foods=[f];setTimeout(function(){openM(0);},300);}
       else toast('❌ Produkt nicht gefunden');
-    }).catch(function(){toast('❌ Netzwerkfehler');});
+    }).catch(function(){toast('❌ Barcode nicht gefunden oder Netzwerkfehler');});
 }
 
 // ══ STATS ══
