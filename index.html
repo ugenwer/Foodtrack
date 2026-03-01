@@ -893,19 +893,54 @@ function showRecentOrEmpty() {
 async function searchFoods(query) {
   const list = document.getElementById('results-list');
   list.innerHTML = `<div class="loading"><div class="spinner"></div>Suche läuft…</div>`;
-  try {
-    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&fields=product_name,brands,nutriments,image_small_url,categories_tags`;
-    const res = await fetch(url);
-    const data = await res.json();
-    const products = (data.products||[]).filter(p => p.product_name && p.nutriments?.['energy-kcal_100g']);
-    if (products.length === 0) { list.innerHTML = `<div class="empty-state"><div class="icon">😕</div><p>Keine Ergebnisse für „${query}"</p></div>`; return; }
-    const foods = products.map(p => offToFood(p));
-    renderResults(foods);
-  } catch(e) {
-    // Fallback with built-in DB
-    const results = FOOD_DB.filter(f => f.name.toLowerCase().includes(query.toLowerCase()));
-    if (results.length) renderResults(results);
-    else list.innerHTML = `<div class="empty-state"><div class="icon">📵</div><p>Keine Verbindung.<br>Lokale Datenbank wird verwendet.</p></div>`;
+
+  // 1) Immer zuerst lokale DB filtern und sofort anzeigen
+  const localResults = FOOD_DB.filter(f =>
+    f.name.toLowerCase().includes(query.toLowerCase()) ||
+    (f.brand||'').toLowerCase().includes(query.toLowerCase())
+  );
+
+  // 2) Versuche OpenFoodFacts über mehrere Endpunkte
+  const urls = [
+    `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&fields=product_name,brands,nutriments,categories_tags`,
+    `https://de.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=20&fields=product_name,brands,nutriments,categories_tags`,
+  ];
+
+  for (const url of urls) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const products = (data.products||[]).filter(p =>
+        p.product_name && (p.nutriments?.['energy-kcal_100g'] || p.nutriments?.['energy-kcal'])
+      );
+      if (products.length > 0) {
+        const onlineFoods = products.map(p => offToFood(p));
+        // Merge: lokale Treffer oben, dann Online-Ergebnisse (Duplikate entfernen)
+        const merged = [...localResults, ...onlineFoods.filter(o =>
+          !localResults.some(l => l.name.toLowerCase() === o.name.toLowerCase())
+        )];
+        renderResults(merged);
+        return;
+      }
+    } catch(e) { /* weiter zum nächsten */ }
+  }
+
+  // 3) Nur lokale DB
+  if (localResults.length > 0) {
+    list.innerHTML = `<div style="padding:8px 0 4px;font-size:12px;color:var(--text3);text-align:center">⚠️ Offline – nur lokale Daten</div>`;
+    renderResults(localResults, true);
+  } else {
+    list.innerHTML = `<div class="empty-state">
+      <div class="icon">📵</div>
+      <p>Keine Verbindung zu OpenFoodFacts.<br><br>
+      <strong style="color:var(--text)">Tipp:</strong> Die App muss über<br>
+      <strong style="color:var(--accent)">HTTPS</strong> geöffnet werden<br>(z.B. via GitHub Pages).<br><br>
+      Lokal als Datei funktioniert<br>die Online-Suche nicht.</p>
+    </div>`;
   }
 }
 
@@ -942,10 +977,10 @@ function getCatEmoji(tags) {
   return '🍽️';
 }
 
-function renderResults(foods) {
+function renderResults(foods, append = false) {
   const list = document.getElementById('results-list');
-  list.innerHTML = foods.map(f => `
-    <div class="result-item" onclick='openFoodModal(${JSON.stringify(f)})'>
+  const html = foods.map(f => `
+    <div class="result-item" onclick='openFoodModal(${JSON.stringify(f).replace(/'/g,"&#39;")})'>
       <div class="result-icon">${f.emoji||'🍽️'}</div>
       <div class="result-info">
         <div class="result-name">${f.name}</div>
@@ -957,6 +992,8 @@ function renderResults(foods) {
         <div class="result-unit">kcal/100g</div>
       </div>
     </div>`).join('');
+  if (append) list.innerHTML += html;
+  else list.innerHTML = html;
 }
 
 // ══════════════════════════ FOOD MODAL ══════════════════════════
@@ -1017,39 +1054,72 @@ function addFoodToLog() {
 
 // ══════════════════════════ BARCODE SCANNER ══════════════════════════
 async function openScanner() {
+  // HTTPS-Prüfung
+  if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    showScannerFallback('⚠️ Kamera benötigt HTTPS', 'Die Kamera funktioniert nur, wenn die App über GitHub Pages (https://...) geöffnet ist.\n\nAlternativ: Barcode-Nummer manuell eingeben.');
+    return;
+  }
   document.getElementById('scanner-overlay').classList.add('active');
   try {
     if (!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
+    // Kameraberechtigungen anfordern
+    await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     const devices = await ZXing.BrowserCodeReader.listVideoInputDevices();
-    const backCam = devices.find(d => d.label.toLowerCase().includes('back') || d.label.toLowerCase().includes('rear')) || devices[devices.length-1];
-    const deviceId = backCam ? backCam.deviceId : undefined;
-    codeReader.decodeFromVideoDevice(deviceId, 'preview', (result, err) => {
+    if (!devices || devices.length === 0) throw new Error('Keine Kamera gefunden');
+    const backCam = devices.find(d =>
+      d.label.toLowerCase().includes('back') ||
+      d.label.toLowerCase().includes('rear') ||
+      d.label.toLowerCase().includes('environment')
+    ) || devices[devices.length - 1];
+    codeReader.decodeFromVideoDevice(backCam.deviceId, 'preview', (result, err) => {
       if (result) {
         closeScanner();
         lookupBarcode(result.getText());
       }
+      // err hier ignorieren – ZXing wirft ständig beim Suchen
     });
-  } catch(e) { showToast('Kamera nicht verfügbar'); closeScanner(); }
+  } catch(e) {
+    closeScanner();
+    console.error('Scanner error:', e);
+    const msg = e.name === 'NotAllowedError'
+      ? 'Kamerazugriff wurde verweigert.\nBitte in den Browser-Einstellungen erlauben.'
+      : e.name === 'NotFoundError'
+      ? 'Keine Kamera gefunden.'
+      : 'Kamera nicht verfügbar: ' + e.message;
+    showScannerFallback('📷 ' + (e.name === 'NotAllowedError' ? 'Kein Kamerazugriff' : 'Kamera-Fehler'), msg);
+  }
+}
+
+function showScannerFallback(title, msg) {
+  // Zeige Dialog zum manuellen Barcode eingeben
+  const code = prompt(`${title}\n\n${msg}\n\nBarcode-Nummer eingeben (oder Abbrechen):`);
+  if (code && code.trim().length > 5) {
+    lookupBarcode(code.trim());
+  }
 }
 
 function closeScanner() {
   document.getElementById('scanner-overlay').classList.remove('active');
-  if (codeReader) { codeReader.reset(); codeReader = null; }
+  if (codeReader) { try { codeReader.reset(); } catch(e){} codeReader = null; }
 }
 
 async function lookupBarcode(barcode) {
   showToast('🔍 Barcode wird gesucht…');
   try {
-    const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`, { signal: controller.signal });
     const data = await res.json();
     if (data.status === 1 && data.product) {
       const food = offToFood(data.product);
       showPage('search', document.querySelectorAll('.nav-btn')[1]);
       setTimeout(() => openFoodModal(food), 300);
     } else {
-      showToast('❌ Produkt nicht gefunden');
+      showToast('❌ Produkt nicht gefunden (Barcode: ' + barcode + ')');
     }
-  } catch(e) { showToast('❌ Netzwerkfehler'); }
+  } catch(e) {
+    showToast('❌ Netzwerkfehler – bitte HTTPS verwenden');
+  }
 }
 
 // ══════════════════════════ STATS ══════════════════════════
@@ -1126,27 +1196,96 @@ function clearData() {
 
 // ══════════════════════════ LOCAL FOOD DB (OFFLINE FALLBACK) ══════════════════════════
 const FOOD_DB = [
+  // Obst
   {name:'Banane',emoji:'🍌',kcal:89,protein:1.1,carbs:23,fat:0.3,fiber:2.6,sugar:12,salt:0,brand:''},
   {name:'Apfel',emoji:'🍎',kcal:52,protein:0.3,carbs:14,fat:0.2,fiber:2.4,sugar:10,salt:0,brand:''},
-  {name:'Ei (gekocht)',emoji:'🥚',kcal:155,protein:13,carbs:1.1,fat:11,fiber:0,sugar:1.1,salt:0.4,brand:''},
-  {name:'Hühnerbrust',emoji:'🍗',kcal:165,protein:31,carbs:0,fat:3.6,fiber:0,sugar:0,salt:0.1,brand:''},
-  {name:'Vollmilch',emoji:'🥛',kcal:61,protein:3.2,carbs:4.8,fat:3.3,fiber:0,sugar:5,salt:0.1,brand:''},
-  {name:'Haferflocken',emoji:'🌾',kcal:389,protein:17,carbs:66,fat:7,fiber:11,sugar:1,salt:0,brand:''},
-  {name:'Thunfisch (Dose)',emoji:'🐟',kcal:116,protein:26,carbs:0,fat:1,fiber:0,sugar:0,salt:0.3,brand:''},
-  {name:'Vollkornbrot',emoji:'🍞',kcal:247,protein:9,carbs:41,fat:3.4,fiber:6,sugar:3,salt:0.5,brand:''},
-  {name:'Magerquark',emoji:'🥛',kcal:60,protein:12,carbs:4,fat:0.2,fiber:0,sugar:4,salt:0.1,brand:''},
-  {name:'Reis (gekocht)',emoji:'🍚',kcal:130,protein:2.7,carbs:28,fat:0.3,fiber:0.4,sugar:0,salt:0,brand:''},
+  {name:'Orange',emoji:'🍊',kcal:47,protein:0.9,carbs:12,fat:0.1,fiber:2.4,sugar:9,salt:0,brand:''},
+  {name:'Erdbeeren',emoji:'🍓',kcal:32,protein:0.7,carbs:7.7,fat:0.3,fiber:2,sugar:4.9,salt:0,brand:''},
+  {name:'Weintrauben',emoji:'🍇',kcal:69,protein:0.7,carbs:18,fat:0.2,fiber:0.9,sugar:16,salt:0,brand:''},
+  {name:'Mango',emoji:'🥭',kcal:60,protein:0.8,carbs:15,fat:0.4,fiber:1.6,sugar:14,salt:0,brand:''},
+  {name:'Kiwi',emoji:'🥝',kcal:61,protein:1.1,carbs:15,fat:0.5,fiber:3,sugar:9,salt:0,brand:''},
+  {name:'Blaubeeren',emoji:'🫐',kcal:57,protein:0.7,carbs:14,fat:0.3,fiber:2.4,sugar:10,salt:0,brand:''},
+  {name:'Ananas',emoji:'🍍',kcal:50,protein:0.5,carbs:13,fat:0.1,fiber:1.4,sugar:10,salt:0,brand:''},
+  {name:'Birne',emoji:'🍐',kcal:57,protein:0.4,carbs:15,fat:0.1,fiber:3.1,sugar:10,salt:0,brand:''},
+  // Gemüse
   {name:'Tomate',emoji:'🍅',kcal:18,protein:0.9,carbs:3.9,fat:0.2,fiber:1.2,sugar:2.6,salt:0,brand:''},
-  {name:'Lachs',emoji:'🐟',kcal:208,protein:20,carbs:0,fat:13,fiber:0,sugar:0,salt:0.1,brand:''},
   {name:'Brokkoli',emoji:'🥦',kcal:34,protein:2.8,carbs:7,fat:0.4,fiber:2.6,sugar:1.7,salt:0,brand:''},
-  {name:'Erdnussbutter',emoji:'🥜',kcal:588,protein:25,carbs:20,fat:50,fiber:6,sugar:9,salt:0.4,brand:''},
-  {name:'Joghurt (Natur)',emoji:'🥛',kcal:59,protein:3.5,carbs:5,fat:3.3,fiber:0,sugar:5,salt:0.1,brand:''},
+  {name:'Karotte',emoji:'🥕',kcal:41,protein:0.9,carbs:10,fat:0.2,fiber:2.8,sugar:4.7,salt:0.1,brand:''},
+  {name:'Gurke',emoji:'🥒',kcal:15,protein:0.7,carbs:3.6,fat:0.1,fiber:0.5,sugar:1.7,salt:0,brand:''},
+  {name:'Paprika rot',emoji:'🫑',kcal:31,protein:1,carbs:6,fat:0.3,fiber:2.1,sugar:4.2,salt:0,brand:''},
+  {name:'Spinat',emoji:'🥬',kcal:23,protein:2.9,carbs:3.6,fat:0.4,fiber:2.2,sugar:0.4,salt:0.1,brand:''},
+  {name:'Zwiebel',emoji:'🧅',kcal:40,protein:1.1,carbs:9.3,fat:0.1,fiber:1.7,sugar:4.2,salt:0,brand:''},
+  {name:'Knoblauch',emoji:'🧄',kcal:149,protein:6.4,carbs:33,fat:0.5,fiber:2.1,sugar:1,salt:0,brand:''},
+  {name:'Zucchini',emoji:'🥒',kcal:17,protein:1.2,carbs:3.1,fat:0.3,fiber:1,sugar:2.5,salt:0,brand:''},
+  {name:'Mais',emoji:'🌽',kcal:86,protein:3.2,carbs:19,fat:1.2,fiber:2.7,sugar:3.2,salt:0,brand:''},
+  // Protein
+  {name:'Hühnerbrust',emoji:'🍗',kcal:165,protein:31,carbs:0,fat:3.6,fiber:0,sugar:0,salt:0.1,brand:''},
+  {name:'Hähnchenschenkel',emoji:'🍗',kcal:209,protein:26,carbs:0,fat:11,fiber:0,sugar:0,salt:0.1,brand:''},
+  {name:'Rinderhackfleisch (20%)',emoji:'🥩',kcal:254,protein:17,carbs:0,fat:20,fiber:0,sugar:0,salt:0.1,brand:''},
+  {name:'Rindersteak',emoji:'🥩',kcal:271,protein:26,carbs:0,fat:18,fiber:0,sugar:0,salt:0.1,brand:''},
+  {name:'Schweineschnitzel',emoji:'🥩',kcal:143,protein:22,carbs:0,fat:6,fiber:0,sugar:0,salt:0.1,brand:''},
+  {name:'Thunfisch (Dose)',emoji:'🐟',kcal:116,protein:26,carbs:0,fat:1,fiber:0,sugar:0,salt:0.3,brand:''},
+  {name:'Lachs',emoji:'🐟',kcal:208,protein:20,carbs:0,fat:13,fiber:0,sugar:0,salt:0.1,brand:''},
+  {name:'Forelle',emoji:'🐟',kcal:119,protein:23,carbs:0,fat:2.7,fiber:0,sugar:0,salt:0.1,brand:''},
+  {name:'Garnelen',emoji:'🦐',kcal:85,protein:18,carbs:0.9,fat:0.9,fiber:0,sugar:0,salt:0.5,brand:''},
+  {name:'Ei (roh)',emoji:'🥚',kcal:143,protein:13,carbs:0.7,fat:9.5,fiber:0,sugar:0.4,salt:0.4,brand:''},
+  {name:'Ei (gekocht)',emoji:'🥚',kcal:155,protein:13,carbs:1.1,fat:11,fiber:0,sugar:1.1,salt:0.4,brand:''},
+  {name:'Tofu',emoji:'🫘',kcal:76,protein:8,carbs:1.9,fat:4.2,fiber:0.3,sugar:0.5,salt:0,brand:''},
+  {name:'Tempeh',emoji:'🫘',kcal:192,protein:19,carbs:9.4,fat:11,fiber:0,sugar:0,salt:0,brand:''},
+  // Milchprodukte
+  {name:'Vollmilch',emoji:'🥛',kcal:61,protein:3.2,carbs:4.8,fat:3.3,fiber:0,sugar:5,salt:0.1,brand:''},
+  {name:'Magerquark',emoji:'🥛',kcal:60,protein:12,carbs:4,fat:0.2,fiber:0,sugar:4,salt:0.1,brand:''},
+  {name:'Joghurt (Natur 3,5%)',emoji:'🥛',kcal:61,protein:3.5,carbs:4.7,fat:3.3,fiber:0,sugar:5,salt:0.1,brand:''},
+  {name:'Griechischer Joghurt',emoji:'🥛',kcal:97,protein:9,carbs:3.6,fat:5,fiber:0,sugar:3.2,salt:0.1,brand:''},
+  {name:'Cheddar',emoji:'🧀',kcal:403,protein:25,carbs:1.3,fat:33,fiber:0,sugar:0.5,salt:1.8,brand:''},
+  {name:'Mozzarella',emoji:'🧀',kcal:280,protein:28,carbs:2.2,fat:17,fiber:0,sugar:1,salt:0.6,brand:''},
+  {name:'Parmesan',emoji:'🧀',kcal:431,protein:38,carbs:3.2,fat:29,fiber:0,sugar:0.8,salt:1.8,brand:''},
+  {name:'Hüttenkäse',emoji:'🥛',kcal:98,protein:11,carbs:3.4,fat:4.3,fiber:0,sugar:2.7,salt:0.4,brand:''},
+  {name:'Butter',emoji:'🧈',kcal:717,protein:0.9,carbs:0.1,fat:81,fiber:0,sugar:0.1,salt:0.1,brand:''},
+  // Getreide & Kohlenhydrate
+  {name:'Haferflocken',emoji:'🌾',kcal:389,protein:17,carbs:66,fat:7,fiber:11,sugar:1,salt:0,brand:''},
+  {name:'Vollkornbrot',emoji:'🍞',kcal:247,protein:9,carbs:41,fat:3.4,fiber:6,sugar:3,salt:0.5,brand:''},
+  {name:'Weißbrot',emoji:'🍞',kcal:265,protein:8,carbs:51,fat:2.7,fiber:2.7,sugar:5,salt:1,brand:''},
+  {name:'Reis (gekocht)',emoji:'🍚',kcal:130,protein:2.7,carbs:28,fat:0.3,fiber:0.4,sugar:0,salt:0,brand:''},
+  {name:'Reis (roh)',emoji:'🍚',kcal:365,protein:7,carbs:80,fat:0.7,fiber:1.3,sugar:0,salt:0,brand:''},
   {name:'Pasta (gekocht)',emoji:'🍝',kcal:158,protein:5.8,carbs:31,fat:0.9,fiber:1.8,sugar:0.6,salt:0,brand:''},
-  {name:'Mandeln',emoji:'🌰',kcal:579,protein:21,carbs:22,fat:50,fiber:13,sugar:4.4,salt:0,brand:''},
-  {name:'Avocado',emoji:'🥑',kcal:160,protein:2,carbs:9,fat:15,fiber:7,sugar:0.7,salt:0,brand:''},
+  {name:'Pasta (roh)',emoji:'🍝',kcal:371,protein:13,carbs:75,fat:1.5,fiber:3,sugar:2.7,salt:0,brand:''},
   {name:'Kartoffel (gekocht)',emoji:'🥔',kcal:86,protein:1.7,carbs:20,fat:0.1,fiber:1.8,sugar:0.9,salt:0,brand:''},
-  {name:'Schokolade (Zartbitter)',emoji:'🍫',kcal:546,protein:5,carbs:60,fat:31,fiber:9,sugar:48,salt:0,brand:''},
+  {name:'Süßkartoffel',emoji:'🍠',kcal:86,protein:1.6,carbs:20,fat:0.1,fiber:3,sugar:4.2,salt:0,brand:''},
+  {name:'Quinoa (gekocht)',emoji:'🌾',kcal:120,protein:4.4,carbs:22,fat:1.9,fiber:2.8,sugar:0.9,salt:0,brand:''},
+  {name:'Cornflakes',emoji:'🥣',kcal:357,protein:8,carbs:84,fat:0.8,fiber:3.8,sugar:10,salt:1.1,brand:''},
+  // Nüsse & Samen
+  {name:'Mandeln',emoji:'🌰',kcal:579,protein:21,carbs:22,fat:50,fiber:13,sugar:4.4,salt:0,brand:''},
+  {name:'Walnüsse',emoji:'🌰',kcal:654,protein:15,carbs:14,fat:65,fiber:6.7,sugar:2.6,salt:0,brand:''},
+  {name:'Cashews',emoji:'🌰',kcal:553,protein:18,carbs:30,fat:44,fiber:3.3,sugar:5.9,salt:0.1,brand:''},
+  {name:'Erdnüsse',emoji:'🥜',kcal:567,protein:26,carbs:16,fat:49,fiber:8.5,sugar:4,salt:0.2,brand:''},
+  {name:'Erdnussbutter',emoji:'🥜',kcal:588,protein:25,carbs:20,fat:50,fiber:6,sugar:9,salt:0.4,brand:''},
+  {name:'Sonnenblumenkerne',emoji:'🌻',kcal:584,protein:21,carbs:20,fat:51,fiber:8.6,sugar:2.6,salt:0.1,brand:''},
+  {name:'Chiasamen',emoji:'🌱',kcal:486,protein:17,carbs:42,fat:31,fiber:34,sugar:0,salt:0.1,brand:''},
+  {name:'Leinsamen',emoji:'🌱',kcal:534,protein:18,carbs:29,fat:42,fiber:27,sugar:1.5,salt:0,brand:''},
+  // Fette & Öle
+  {name:'Olivenöl',emoji:'🫒',kcal:884,protein:0,carbs:0,fat:100,fiber:0,sugar:0,salt:0,brand:''},
+  {name:'Avocado',emoji:'🥑',kcal:160,protein:2,carbs:9,fat:15,fiber:7,sugar:0.7,salt:0,brand:''},
+  // Hülsenfrüchte
+  {name:'Linsen (gekocht)',emoji:'🫘',kcal:116,protein:9,carbs:20,fat:0.4,fiber:7.9,sugar:1.8,salt:0,brand:''},
+  {name:'Kichererbsen (gekocht)',emoji:'🫘',kcal:164,protein:8.9,carbs:27,fat:2.6,fiber:7.6,sugar:4.8,salt:0,brand:''},
+  {name:'Kidneybohnen (gekocht)',emoji:'🫘',kcal:127,protein:8.7,carbs:22,fat:0.5,fiber:7.4,sugar:0.3,salt:0,brand:''},
+  {name:'Edamame',emoji:'🫘',kcal:121,protein:11,carbs:8.9,fat:5.2,fiber:5.2,sugar:2.2,salt:0,brand:''},
+  // Snacks & Süßigkeiten
+  {name:'Schokolade (Zartbitter 70%)',emoji:'🍫',kcal:546,protein:5,carbs:60,fat:31,fiber:9,sugar:48,salt:0,brand:''},
+  {name:'Schokolade (Vollmilch)',emoji:'🍫',kcal:535,protein:7.7,carbs:60,fat:29,fiber:3.4,sugar:55,salt:0.1,brand:''},
+  {name:'Kartoffelchips',emoji:'🍿',kcal:536,protein:7,carbs:53,fat:34,fiber:4.4,sugar:0.5,salt:1.4,brand:''},
+  {name:'Popcorn',emoji:'🍿',kcal:387,protein:13,carbs:78,fat:4.5,fiber:15,sugar:0.9,salt:0.7,brand:''},
+  // Getränke
+  {name:'Orangensaft',emoji:'🍊',kcal:45,protein:0.7,carbs:10,fat:0.2,fiber:0.2,sugar:8.4,salt:0,brand:''},
+  {name:'Cola (normal)',emoji:'🥤',kcal:42,protein:0,carbs:11,fat:0,fiber:0,sugar:11,salt:0,brand:''},
+  {name:'Bier (normal)',emoji:'🍺',kcal:43,protein:0.5,carbs:3.6,fat:0,fiber:0,sugar:0,salt:0,brand:''},
+  {name:'Rotwein',emoji:'🍷',kcal:85,protein:0.1,carbs:2.6,fat:0,fiber:0,sugar:0.6,salt:0,brand:''},
+  // Fertigprodukte
+  {name:'Proteinpulver (Whey)',emoji:'💪',kcal:370,protein:80,carbs:6,fat:4,fiber:0,sugar:4,salt:0.5,brand:''},
+  {name:'Griechischer Joghurt 0%',emoji:'🥛',kcal:57,protein:10,carbs:3.6,fat:0.4,fiber:0,sugar:3.4,salt:0.1,brand:''},
 ];
+
 </script>
 </body>
 </html>
