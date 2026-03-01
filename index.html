@@ -557,7 +557,16 @@ const DB=[
 {n:'Mayonnaise',e:'🫙',k:680,p:1.7,c:3,f:74,fi:0,s:2,sa:1.1,b:''},
 {n:'Senf',e:'🫙',k:93,p:5.7,c:6.4,f:4.6,fi:3.8,s:3.6,sa:2.1,b:''},
 {n:'Sojasoße',e:'🫙',k:71,p:9.8,c:6.6,f:0.1,fi:0.4,s:1.4,sa:14,b:''},
-
+{n:'Pesto',e:'🫙',k:433,p:6.1,c:4.4,f:43,fi:1.5,s:2.6,sa:0.8,b:''},
+{n:'Hummus',e:'🫘',k:166,p:7.9,c:14,f:9.6,fi:6,s:0.6,sa:0.7,b:''},
+{n:'Joghurt Frucht',e:'🍓',k:100,p:3.7,c:16,f:2.7,fi:0.3,s:15,sa:0.1,b:''},
+{n:'Eis Vanille',e:'🍦',k:207,p:3.5,c:24,f:11,fi:0,s:21,sa:0.1,b:''},
+{n:'Käsekuchen',e:'🍰',k:320,p:7,c:30,f:18,fi:0.5,s:20,sa:0.3,b:''},
+{n:'Apfelkuchen',e:'🍰',k:265,p:3.5,c:42,f:9,fi:1.5,s:20,sa:0.3,b:''},
+{n:'Tiramisu',e:'🍰',k:283,p:5.8,c:27,f:17,fi:0.4,s:14,sa:0.1,b:''},
+{n:'Muffin',e:'🧁',k:378,p:5.7,c:56,f:15,fi:1.4,s:29,sa:0.5,b:''},
+{n:'Croissant',e:'🥐',k:406,p:8.2,c:46,f:21,fi:2.6,s:9.6,sa:0.7,b:''}
+];
 
 // ══ STATE ══
 const TODAY=new Date().toISOString().split('T')[0];
@@ -681,7 +690,6 @@ function showEmpty(){
   if(recents.length&&!favs.length){html+='<div style="margin-top:12px;padding:0 12px"><div style="font-size:11px;color:var(--t2);margin-bottom:6px">🕐 Zuletzt verwendet</div>'+recents.map(function(f,i){return '<div class="ri" onclick="openM('+window._foods.indexOf(f)+')" style="cursor:pointer"><div class="ric">'+f.e+'</div><div class="rin"><div class="rn2">'+f.n+'</div></div></div>';}).join('')+'</div>';}
   html+='<div style="padding:0 12px;margin-top:12px;font-size:11px;color:var(--t3)">Online-Suche · Powered by OpenFoodFacts</div></div>';
   document.getElementById('rlist').innerHTML=html;
-  window._foods=[];
 }
 function clearSearch(){
   document.getElementById('si').value='';
