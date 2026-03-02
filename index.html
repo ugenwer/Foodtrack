@@ -717,9 +717,35 @@ function setSt(icon,txt){
 function doSearch(q){
   var ql=q.toLowerCase();
   var cacheKey='off_'+ql;
+  // helper for similarity/fuzzy matching
+  function levenshtein(a,b){
+    if(a===b) return 0;
+    var la=a.length, lb=b.length;
+    if(la===0) return lb;
+    if(lb===0) return la;
+    var v0=new Array(lb+1), v1=new Array(lb+1);
+    for(var i=0;i<=lb;i++) v0[i]=i;
+    for(var i=0;i<la;i++){
+      v1[0]=i+1;
+      for(var j=0;j<lb;j++){
+        var cost = a[i]===b[j]?0:1;
+        v1[j+1]=Math.min(v1[j]+1, v0[j+1]+1, v0[j]+cost);
+      }
+      var tmp=v0;v0=v1;v1=tmp;
+    }
+    return v0[lb];
+  }
+  function fuzzyMatch(name, query){
+    name=name.toLowerCase(); query=query.toLowerCase();
+    if(name.indexOf(query)>=0) return true;
+    var d=levenshtein(name,query);
+    var maxlen=Math.max(name.length,query.length);
+    return (maxlen>0 && d/maxlen<=0.3);
+  }
+
   // Zeige Loading + Favoriten/Recent
-  var recents=(S.recent||[]).slice(0,3).filter(function(r){return r.n.toLowerCase().indexOf(ql)>=0;});
-  var favs=(S.favorites||[]).filter(function(f){return f.n.toLowerCase().indexOf(ql)>=0;});
+  var recents=(S.recent||[]).slice(0,3).filter(function(r){return fuzzyMatch(r.n, q);});
+  var favs=(S.favorites||[]).filter(function(f){return fuzzyMatch(f.n, q);});
   var all=favs.concat(recents);
   if(all.length){
     setSt('💫','Suche läuft…');
@@ -742,8 +768,18 @@ function doSearch(q){
   searchOnline(q,cacheKey);
 }
 function searchOnline(q,cacheKey){
+  // bail out early when offline; avoids confusing "connection" errors
+  if(typeof navigator !== 'undefined' && !navigator.onLine){
+    setSt('r','Offline');
+    document.getElementById('rlist').innerHTML =
+      '<div class="empty"><div class="ei">📡</div>' +
+      '<p style="font-size:13px">Keine Internetverbindung.</p></div>';
+    return;
+  }
+
   var done=false,errors=0;
   var urls=[
+    // primary legacy endpoint and newer API as fallback
     'https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=24&fields=product_name,brands,nutriments,categories_tags&sort_by=unique_scans_n',
     'https://world.openfoodfacts.org/api/v2/search?search_terms='+encodeURIComponent(q)+'&page_size=24&fields=product_name,brands,nutriments,categories_tags&sort_by=unique_scans_n'
   ];
@@ -758,8 +794,8 @@ function searchOnline(q,cacheKey){
     var online=prods.map(p2f);
     _offCache[cacheKey]=online;
     var ql=q.toLowerCase();
-    var favs=(S.favorites||[]).filter(function(f){return f.n.toLowerCase().indexOf(ql)>=0;});
-    var recents=(S.recent||[]).slice(0,3).filter(function(r){return r.n.toLowerCase().indexOf(ql)>=0;});
+    var favs=(S.favorites||[]).filter(function(f){return fuzzyMatch(f.n, q);});
+    var recents=(S.recent||[]).slice(0,3).filter(function(r){return fuzzyMatch(r.n, q);});
     var merged=favs.concat(recents).concat(online.filter(function(o){
       return !favs.some(function(f){return f.n===o.n;})&&!recents.some(function(r){return r.n===o.n;});
     }));
@@ -767,10 +803,23 @@ function searchOnline(q,cacheKey){
     setSt('g',merged.length+' Ergebnisse \u2713');
     window._foods=merged;renderList(merged);
   }
-  function onErr(){errors++;if(errors>=urls.length&&!done){done=true;setSt('r','Nicht erreichbar');document.getElementById('rlist').innerHTML='<div class="empty"><div class="ei">\ud83d\udcf5</div><p style="font-size:13px">Keine Verbindung.<br>Pr\u00fcfe dein Internet.</p></div>';}}
+  function onErr(){
+    errors++;
+    if(errors>=urls.length&&!done){
+      done=true;
+      setSt('r','Nicht erreichbar');
+      var msg = (typeof navigator !== 'undefined' && navigator.onLine)
+                ? 'Server nicht erreichbar. Bitte versuche es sp\u00e4ter.'
+                : 'Keine Verbindung.\nPr\u00fcfe dein Internet.';
+      document.getElementById('rlist').innerHTML =
+        '<div class="empty"><div class="ei">\ud83d\udcf5</div>' +
+        '<p style="font-size:13px">' + msg + '</p></div>';
+    }
+  }
   urls.forEach(function(url){
     var ctrl=new AbortController();
-    setTimeout(function(){ctrl.abort();},8000);
+    // give the API a bit more time in case of slow network
+    setTimeout(function(){ctrl.abort();},15000);
     fetch(url,{signal:ctrl.signal}).then(function(r){if(!r.ok)throw 0;return r.json();}).then(finish).catch(onErr);
   });
 }
