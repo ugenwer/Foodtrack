@@ -239,6 +239,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--t);font-f
       <input class="si" id="si" type="search" placeholder="Name, Hersteller, Freitext…" autocomplete="off" autocorrect="off" spellcheck="false">
       <button class="clr" id="clr-btn" onclick="clearSearch()">✕</button>
     </div>
+    <div style="margin-top:6px;font-size:11px;color:var(--t2)">
+      <button id="db-import-btn" onclick="populateFromOFF()" style="background:none;border:none;color:var(--a);cursor:pointer">Lokale Datenbank aktualisieren</button>
+    </div>
   </div>
   <div class="stbar" id="stbar"></div>
   <div class="rl" id="rlist">
@@ -688,6 +691,104 @@ function openS(m){selM=m;document.querySelectorAll('.mch').forEach(function(c){c
 function delF(i){if(!confirm('Eintrag löschen?'))return;(S.log[TODAY]||[]).splice(i,1);save();updH();toast('Entfernt');}
 
 // ══ SEARCH ══
+
+// fuzzy matching helpers (shared between offline and online search)
+function levenshtein(a,b){
+  if(a===b) return 0;
+  var la=a.length, lb=b.length;
+  if(la===0) return lb;
+  if(lb===0) return la;
+  var v0=new Array(lb+1), v1=new Array(lb+1);
+  for(var i=0;i<=lb;i++) v0[i]=i;
+  for(var i=0;i<la;i++){
+    v1[0]=i+1;
+    for(var j=0;j<lb;j++){
+      var cost = a[i]===b[j]?0:1;
+      v1[j+1]=Math.min(v1[j]+1, v0[j+1]+1, v0[j]+cost);
+    }
+    var tmp=v0;v0=v1;v1=tmp;
+  }
+  return v0[lb];
+}
+function fuzzyMatch(name, query){
+  name=name.toLowerCase(); query=query.toLowerCase();
+  if(name.indexOf(query)>=0) return true;
+  var d=levenshtein(name,query);
+  var maxlen=Math.max(name.length,query.length);
+  return (maxlen>0 && d/maxlen<=0.3);
+}
+
+// local database helpers (IndexedDB)
+function openDb(){
+  return new Promise(function(resolve,reject){
+    var req=indexedDB.open('nutrition',1);
+    req.onupgradeneeded=function(e){
+      var db=e.target.result;
+      if(!db.objectStoreNames.contains('products')){
+        db.createObjectStore('products',{keyPath:'code'});
+      }
+    };
+    req.onsuccess=function(e){resolve(e.target.result);};
+    req.onerror=function(e){reject(e.target.error);};
+  });
+}
+function addProducts(arr){
+  return openDb().then(function(db){
+    return new Promise(function(resolve,reject){
+      var tx=db.transaction('products','readwrite');
+      var store=tx.objectStore('products');
+      arr.forEach(function(p){store.put(p);});
+      tx.oncomplete=resolve;
+      tx.onerror=reject;
+    });
+  });
+}
+function searchLocal(q){
+  return openDb().then(function(db){
+    return new Promise(function(resolve,reject){
+      var tx=db.transaction('products','readonly');
+      var store=tx.objectStore('products');
+      var results=[];
+      store.openCursor().onsuccess=function(e){
+        var cursor=e.target.result;
+        if(cursor){
+          var name=(cursor.value.product_name||'');
+          if(fuzzyMatch(name,q)){
+            results.push(p2f(cursor.value));
+          }
+          cursor.continue();
+        } else {
+          resolve(results);
+        }
+      };
+      tx.onerror=reject;
+    });
+  });
+}
+
+function populateFromOFF(){
+  setSt('⏳','Datenbank wird aufgebaut…');
+  var page=1;
+  function fetchPage(){
+    var url='https://world.openfoodfacts.org/cgi/search.pl?page_size=1000&page='+page+'&json=1';
+    fetch(url).then(function(r){return r.json();}).then(function(data){
+      if(data && data.products && data.products.length){
+        addProducts(data.products).then(function(){
+          page++;
+          setSt('⏳','Seite '+(page-1)+' gespeichert');
+          if(page<=5) fetchPage(); else {setSt('✓','Lokale DB geladen');}
+        });
+      } else {
+        setSt('✓','Lokale DB geladen');
+      }
+    }).catch(function(err){
+      console.error('DB import error',err);
+      setSt('r','Import fehlgeschlagen');
+    });
+  }
+  fetchPage();
+}
+
 window._foods=[];
 var selM='Frühstück';
 var _offCache={};
@@ -699,7 +800,21 @@ function showEmpty(){
   var html='<div class="empty"><div class="ei">🔍</div><p style="font-size:13px">Tippe einen Lebensmittelnamen ein</p>';
   if(favs.length){html+='<div style="margin-top:12px;padding:0 12px"><div style="font-size:11px;color:var(--t2);margin-bottom:6px">⭐ Favoriten</div>'+favs.map(function(f,i){return '<div class="ri" onclick="openM('+window._foods.indexOf(f)+')" style="cursor:pointer"><div class="ric">'+f.e+'</div><div class="rin"><div class="rn2">'+f.n+'</div></div></div>';}).join('')+'</div>';}
   if(recents.length&&!favs.length){html+='<div style="margin-top:12px;padding:0 12px"><div style="font-size:11px;color:var(--t2);margin-bottom:6px">🕐 Zuletzt verwendet</div>'+recents.map(function(f,i){return '<div class="ri" onclick="openM('+window._foods.indexOf(f)+')" style="cursor:pointer"><div class="ric">'+f.e+'</div><div class="rin"><div class="rn2">'+f.n+'</div></div></div>';}).join('')+'</div>';}
-  html+='<div style="padding:0 12px;margin-top:12px;font-size:11px;color:var(--t3)">Online-Suche · Powered by OpenFoodFacts</div></div>';
+  html+='<div style="padding:0 12px;margin-top:12px;font-size:11px;color:var(--t3)">Online-Suche · Powered by OpenFoodFacts</div>';
+  html+='<div style="padding:0 12px;margin-top:4px;font-size:11px;color:var(--t3)"><button onclick="populateFromOFF()" style="background:none;border:none;color:var(--a);cursor:pointer">Lokale DB aktualisieren</button></div>';
+  // show count if available
+  openDb().then(function(db){
+    var tx=db.transaction('products','readonly');
+    var store=tx.objectStore('products');
+    var req=store.count();
+    req.onsuccess=function(){
+      if(req.result>0){
+        document.getElementById('rlist').querySelector('.empty').insertAdjacentHTML('beforeend',
+          '<div style="padding:4px 12px;font-size:11px;color:var(--t3)">Lokale Einträge: '+req.result+'</div>');
+      }
+    };
+  }).catch(function(){});
+  html+='</div>';
   document.getElementById('rlist').innerHTML=html;
 }
 function clearSearch(){
@@ -717,55 +832,61 @@ function setSt(icon,txt){
 function doSearch(q){
   var ql=q.toLowerCase();
   var cacheKey='off_'+ql;
-  // helper for similarity/fuzzy matching
-  function levenshtein(a,b){
-    if(a===b) return 0;
-    var la=a.length, lb=b.length;
-    if(la===0) return lb;
-    if(lb===0) return la;
-    var v0=new Array(lb+1), v1=new Array(lb+1);
-    for(var i=0;i<=lb;i++) v0[i]=i;
-    for(var i=0;i<la;i++){
-      v1[0]=i+1;
-      for(var j=0;j<lb;j++){
-        var cost = a[i]===b[j]?0:1;
-        v1[j+1]=Math.min(v1[j]+1, v0[j+1]+1, v0[j]+cost);
-      }
-      var tmp=v0;v0=v1;v1=tmp;
+  // first attempt to return local database results before hitting network
+  searchLocal(q).then(function(localResults){
+    if(localResults && localResults.length){
+      setSt('g',localResults.length+' lokale Treffer');
+      window._foods=localResults;
+      renderList(localResults);
+      return;
     }
-    return v0[lb];
-  }
-  function fuzzyMatch(name, query){
-    name=name.toLowerCase(); query=query.toLowerCase();
-    if(name.indexOf(query)>=0) return true;
-    var d=levenshtein(name,query);
-    var maxlen=Math.max(name.length,query.length);
-    return (maxlen>0 && d/maxlen<=0.3);
-  }
-
-  // Zeige Loading + Favoriten/Recent
-  var recents=(S.recent||[]).slice(0,3).filter(function(r){return fuzzyMatch(r.n, q);});
-  var favs=(S.favorites||[]).filter(function(f){return fuzzyMatch(f.n, q);});
-  var all=favs.concat(recents);
-  if(all.length){
-    setSt('💫','Suche läuft…');
-    window._foods=all;
-    renderList(all);
-  } else {
-    document.getElementById('rlist').innerHTML='<div style="text-align:center;padding:32px;color:var(--t2)"><div class="spin"></div>Suche…</div>';
-  }
-  // Check Cache
-  if(_offCache[cacheKey]){
-    var cached=_offCache[cacheKey];
-    var merge=favs.concat(cached.filter(function(o){
-      return !favs.some(function(f){return f.n===o.n;})&&!recents.some(function(r){return r.n===o.n;});
-    }));
-    setSt('✓',merge.length+' Ergebnisse');
-    window._foods=merge;
-    renderList(merge);
-    return;
-  }
-  searchOnline(q,cacheKey);
+    // Zeige Loading + Favoriten/Recent
+    var recents=(S.recent||[]).slice(0,3).filter(function(r){return fuzzyMatch(r.n, q);});
+    var favs=(S.favorites||[]).filter(function(f){return fuzzyMatch(f.n, q);});
+    var all=favs.concat(recents);
+    if(all.length){
+      setSt('💫','Suche läuft…');
+      window._foods=all;
+      renderList(all);
+    } else {
+      document.getElementById('rlist').innerHTML='<div style="text-align:center;padding:32px;color:var(--t2)"><div class="spin"></div>Suche…</div>';
+    }
+    // Check Cache
+    if(_offCache[cacheKey]){
+      var cached=_offCache[cacheKey];
+      var merge=favs.concat(cached.filter(function(o){
+        return !favs.some(function(f){return f.n===o.n;})&&!recents.some(function(r){return r.n===o.n;});
+      }));
+      setSt('✓',merge.length+' Ergebnisse');
+      window._foods=merge;
+      renderList(merge);
+      return;
+    }
+    searchOnline(q,cacheKey);
+  }).catch(function(){
+    // if local search fails for some reason, continue as before
+    var recents=(S.recent||[]).slice(0,3).filter(function(r){return fuzzyMatch(r.n, q);});
+    var favs=(S.favorites||[]).filter(function(f){return fuzzyMatch(f.n, q);});
+    var all=favs.concat(recents);
+    if(all.length){
+      setSt('💫','Suche läuft…');
+      window._foods=all;
+      renderList(all);
+    } else {
+      document.getElementById('rlist').innerHTML='<div style="text-align:center;padding:32px;color:var(--t2)"><div class="spin"></div>Suche…</div>';
+    }
+    if(_offCache[cacheKey]){
+      var cached=_offCache[cacheKey];
+      var merge=favs.concat(cached.filter(function(o){
+        return !favs.some(function(f){return f.n===o.n;})&&!recents.some(function(r){return r.n===o.n;});
+      }));
+      setSt('✓',merge.length+' Ergebnisse');
+      window._foods=merge;
+      renderList(merge);
+      return;
+    }
+    searchOnline(q,cacheKey);
+  });
 }
 function searchOnline(q,cacheKey){
   // bail out early when offline; avoids confusing "connection" errors
@@ -791,6 +912,10 @@ function searchOnline(q,cacheKey){
       var n=p.nutriments||{};
       return n['energy-kcal_100g']||n['energy-kcal']||n['energy_100g']||n['energy-kj_100g'];
     });
+    // also keep these products locally for future offline search
+    if(prods.length){
+      addProducts(prods).catch(function(e){console.warn('local store failed',e);});
+    }
     var online=prods.map(p2f);
     _offCache[cacheKey]=online;
     var ql=q.toLowerCase();
